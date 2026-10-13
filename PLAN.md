@@ -1,4 +1,6 @@
-# MicoPay Rentas — Estudio y plan v0.1 (2026-10-12)
+# MicoPay Rentas — Estudio y plan v0.2 (2026-10-13)
+
+> **Estado 2026-10-13.** Eric eligió demo funcional, escrow-v2 desde el inicio y Tepoztlán. Hecho: escrow-v2 (16 pruebas) desplegado en testnet `CDTZISWU…BKS55`, API y web (R1–R4 en versión demo, sin login con MicoPay), prueba de punta a punta en testnet con 11/11 comprobaciones. Pendiente: firma desde la app de MicoPay, fotos reales, R0 (validar con anfitriones), auditoría del contrato.
 
 Plataforma de rentas de corto plazo, estilo Airbnb, donde el pago de la reserva queda en un escrow en Stellar y se libera al anfitrión después del check-in. Comisión baja, pago desde la app de MicoPay.
 
