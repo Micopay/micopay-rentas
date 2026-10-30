@@ -2,7 +2,9 @@
 
 Short-term rentals in Tepoztlán, Morelos, where the booking payment waits in a Stellar escrow instead of a platform's bank account. The host is paid after check-in. The cancellation policy and the damage deposit live in the contract. The platform fee is 3 %.
 
-Testnet demo. The listings are fictional homes.
+**Status:** Testnet demo. The listings are fictional homes.
+
+**Custody:** the `escrow-v2` contract holds booking funds until they are released or refunded. MicoPay acts as arbiter in disputes: it can split a booking's escrow between guest, host and platform, but cannot send funds anywhere else.
 
 ## How a booking works
 
