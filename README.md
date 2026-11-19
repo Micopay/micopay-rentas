@@ -6,6 +6,15 @@ Short-term rentals in Tepoztlán, Morelos, where the booking payment waits in a 
 
 **Custody:** the `escrow-v2` contract holds booking funds until they are released or refunded. MicoPay acts as arbiter in disputes: it can split a booking's escrow between guest, host and platform, but cannot send funds anywhere else.
 
+## How it connects to the MicoPay app (planned)
+
+MicoPay Rentas is part of the [MicoPay](https://github.com/Micopay) ecosystem. **Today it runs on its own: guests and hosts sign with local testnet keys, not with the MicoPay app.** The planned connection:
+
+- **The guest pays from the MicoPay app,** in USDC, or with cash turned into digital money through the MicoPay cash network.
+- **The host is paid into their MicoPay account** and can cash out with a MicoPay agent or send it to their bank via SPEI.
+- **Both approve bookings, releases and claims in the app** (`/sign-requests`), the same path as MicoPay Café.
+- **One identity across MicoPay products:** the Stellar address.
+
 ## How a booking works
 
 1. **Book.** The guest pays stay + cleaning + 3 % fee + a refundable damage deposit into `escrow-v2`, in USDC from their MicoPay account. Prices are in MXN and convert at MicoPay's USDC/MXN rate.
@@ -44,7 +53,7 @@ npx tsx apps/api/test/e2e.ts            # every escrow path on testnet (~6 min)
 cd contracts/escrow-v2 && cargo test
 ```
 
-The seed needs the `stellar` CLI identities `rentas-admin` (admin and arbiter) and `rentas-plataforma` (fee wallet). It also needs the issuer key of MicoPay's testnet USDC in `~/.micopay/ensayo-usdc.json`.
+**Running it outside MicoPay:** the seed needs the `stellar` CLI identities `rentas-admin` (admin and arbiter) and `rentas-plataforma` (fee wallet). It also needs the issuer key of MicoPay's testnet USDC in `~/.micopay/ensayo-usdc.json`.
 
 **Demo clock.** `DEMO_DAY_SECS` (default 60) is how long one calendar day lasts on-chain. A stay three days ahead checks in three minutes after booking, so the whole lifecycle fits in a demo. Set it to `86400` for real time. The 7-day arbiter window is not scaled.
 
