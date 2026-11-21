@@ -6,7 +6,10 @@ import type { ButtonHTMLAttributes, ReactNode } from 'react';
    Traducción obligatoria: la .pill del sitio mide ~43 dp de alto
    (9 px de padding + 13 px de texto), POR DEBAJO del mínimo táctil de 48 dp
    de Android. Sube a 13 px de padding y 14 px de texto. Es la única medida
-   del sistema que no se puede portar tal cual. */
+   del sistema que no se puede portar tal cual.
+
+   Accesibilidad (RENT-2): touch target mínimo de 48 × 48 y foco visible
+   mediante focus-visible, sin tocar la capa de tokens. */
 
 interface PillProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   activa?: boolean;
@@ -19,7 +22,7 @@ export default function Pill({ activa = false, className = '', children, ...rest
       type="button"
       data-on={activa}
       aria-pressed={activa}
-      className={`inline-flex min-h-12 items-center gap-2 whitespace-nowrap rounded-sm border-2 border-tinta px-[18px] py-[13px] text-[14px] font-bold tracking-[.02em] transition-colors duration-150 active:translate-x-[2px] active:translate-y-[2px] ${
+      className={`inline-flex min-h-12 min-w-12 items-center gap-2 whitespace-nowrap rounded-sm border-2 border-tinta px-[18px] py-[13px] text-[14px] font-bold tracking-[.02em] transition-colors duration-150 active:translate-x-[2px] active:translate-y-[2px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tinta ${
         activa ? 'bg-tinta text-papel' : 'bg-papel text-tinta'
       } ${className}`}
       {...rest}

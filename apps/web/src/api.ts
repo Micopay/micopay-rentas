@@ -29,12 +29,23 @@ export interface BookingEvent { id: number; kind: string; actor: string; tx_hash
 export interface BookingDetail extends Booking { chain: ChainBooking | null; ledgerTime: number; events: BookingEvent[] }
 export interface TxResult { txHash: string; explorer: string; status: Status | null }
 
+export class ApiError extends Error {
+  constructor(message: string, public status: number, public serverMessage: string | null) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
+
 async function call<T>(path: string, body?: unknown): Promise<T> {
   const res = await fetch(`/api${path}`, body === undefined ? undefined : {
     method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error((data as { error?: string }).error ?? `Error ${res.status}`);
+  if (!res.ok) {
+    const serverMessage = (data as { error?: string }).error ?? null;
+    // Raw server text is kept on the error for debugging only; UI shows genericError() instead.
+    throw new ApiError(serverMessage ?? `Error ${res.status}`, res.status, serverMessage);
+  }
   return data as T;
 }
 
