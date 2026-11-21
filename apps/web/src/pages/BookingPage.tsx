@@ -2,7 +2,7 @@ import Big from 'big.js';
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api, type BookingDetail } from '../api';
-import { Cover, ErrorBox, Panel, Row, StatusBadge, usePersona } from '../comun';
+import { Cover, ErrorBox, Loading, Panel, Row, StatusBadge, usePersona } from '../comun';
 import { day, duration, mxn, short, usdc, when } from '../format';
 import { Button, Icon, Label } from '../ui';
 
@@ -17,15 +17,17 @@ export default function BookingPage({ onChange }: { onChange: () => void }) {
   const [b, setB] = useState<BookingDetail | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [initialLoad, setInitialLoad] = useState(true);
   const [skew, setSkew] = useState(0); // ledger clock − local clock
   const [now, setNow] = useState(Date.now() / 1000);
   const [split, setSplit] = useState<{ guest: string; host: string; platform: string } | null>(null);
 
-  const load = () => api.booking(Number(id)).then((d) => { setB(d); setSkew(d.ledgerTime - Date.now() / 1000); }).catch((e: Error) => setErr(e.message));
+  const load = () => api.booking(Number(id)).then((d) => { setB(d); setSkew(d.ledgerTime - Date.now() / 1000); setInitialLoad(false); }).catch((e: Error) => { setErr(e.message); setInitialLoad(false); });
   useEffect(() => { load(); const t = setInterval(load, 10_000); return () => clearInterval(t); }, [id]);
   useEffect(() => { const t = setInterval(() => setNow(Date.now() / 1000), 1000); return () => clearInterval(t); }, []);
 
-  if (!b) return <ErrorBox msg={err} />;
+  if (initialLoad && !b) return <ErrorBox msg={err} />;
+  if (!b) return <ErrorBox msg={err ?? 'Booking not found'} />;
   const ledger = now + skew;
   const checkIn = Number(b.chain_check_in), deadline = Number(b.chain_deadline);
   const phase = ledger < checkIn ? 'before' : ledger < deadline ? 'stay' : 'after';
@@ -112,7 +114,7 @@ export default function BookingPage({ onChange }: { onChange: () => void }) {
       </div>
 
       <div className="min-w-0 space-y-4 lg:sticky lg:top-4 lg:self-start">
-        <ErrorBox msg={err} />
+        <ErrorBox msg={err} onRetry={load} />
         {!open && b.status !== 'disputed' && <Panel title="Closed"><p>This booking is settled. Every movement is in the history with its Stellar transaction.</p></Panel>}
 
         {who === 'guest' && mine && open && phase === 'before' && (
