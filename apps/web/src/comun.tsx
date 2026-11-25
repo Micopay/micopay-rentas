@@ -29,6 +29,7 @@ export function Cover({ n, title, className = '' }: { n: number; title?: string;
 
 const STATUS: Record<Status, { label: string; tono: 'tinta' | 'naranja' | 'verde' | 'papel' | 'aviso' }> = {
   locked: { label: 'In escrow', tono: 'tinta' },
+  stay_paid: { label: 'Stay paid', tono: 'verde' },
   disputed: { label: 'Disputed', tono: 'aviso' },
   released: { label: 'Paid out', tono: 'verde' },
   resolved: { label: 'Resolved', tono: 'verde' },

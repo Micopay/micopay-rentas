@@ -1,5 +1,5 @@
 import Big from 'big.js';
-import { CLAIM_DAYS, DAY_SECS, FEE_RATE } from './config.js';
+import { CLAIM_DAYS, DAY_SECS, FEE_RATE, STAY_HOLD_DAYS } from './config.js';
 
 export type Policy = 'flexible' | 'moderate' | 'strict';
 
@@ -63,7 +63,7 @@ export function chainTimes(checkIn: string, checkOut: string, nowMs = Date.now()
   const scale = (ms: number) => Math.floor(nowMs / 1000 + ((ms - nowMs) / DAY_MS) * DAY_SECS);
   const checkInSec = scale(checkInMs);
   const deadlineSec = scale(checkOutMs) + CLAIM_DAYS * DAY_SECS;
-  return { checkInSec, deadlineSec };
+  return { checkInSec, stayPaidAtSec: checkInSec + STAY_HOLD_DAYS * DAY_SECS, deadlineSec };
 }
 
 export function chainTiers(policy: Policy): Array<{ min_secs_before: number; refund_bps: number }> {

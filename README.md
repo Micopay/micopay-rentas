@@ -21,17 +21,17 @@ MicoPay Rentas is part of the [MicoPay](https://github.com/Micopay) ecosystem. *
 2. **Before check-in.**
    - If the guest cancels, the policy decides the refund (flexible, moderate or strict). The rest goes to host and platform in proportion, and the deposit always comes back.
    - If the host cancels, the guest gets everything back.
-3. **After check-in.** The guest can release the payment, or report a problem until claims close. The host can claim damage in the same window.
-4. **Disputes.** The arbiter (MicoPay) splits the escrow between guest, host and platform. It cannot send funds anywhere else, and the platform can never take more than its fee.
-5. **Nobody acts.** After claims close, anyone can settle: the host gets the stay and the guest the deposit. A dispute the arbiter doesn't decide within 7 days settles the same way, so funds are never stuck.
+3. **After check-in.** The guest can report a problem during the stay hold. Once the hold ends (one calendar day by default), anyone can pay the host for the stay and fee; the damage deposit remains in escrow.
+4. **Claims and disputes.** Until claims close, the guest can release the deposit or report a problem, and the host can claim damage. The arbiter (MicoPay) can split the deposit after the stay has been paid, but cannot take any platform fee from that deposit.
+5. **Nobody acts.** After claims close, anyone can settle: the guest gets the deposit back. A dispute the arbiter doesn't decide within 7 days settles the same way, so funds are never stuck.
 
 ## Contract: `contracts/escrow-v2`
 
 Soroban, `soroban-sdk` 26. 16 unit tests cover every path, the policy validation, and that every path leaves the escrow empty.
 
 ```
-lock(id, payer, beneficiary, amount, fee, deposit, check_in, deadline, policy)
-cancel(id) · host_cancel(id) · release(id, by) · dispute(id) · claim_damage(id)
+lock(id, payer, beneficiary, amount, fee, deposit, check_in, stay_hold_secs, deadline, policy)
+cancel(id) · host_cancel(id) · pay_stay(id) · release(id, by) · dispute(id) · claim_damage(id)
 resolve(id, to_payer, to_beneficiary, to_platform) · settle_default(id) · bump(id)
 ```
 
@@ -55,7 +55,7 @@ cd contracts/escrow-v2 && cargo test
 
 **Running it outside MicoPay:** the seed needs the `stellar` CLI identities `rentas-admin` (admin and arbiter) and `rentas-plataforma` (fee wallet). It also needs the issuer key of MicoPay's testnet USDC in `~/.micopay/ensayo-usdc.json`.
 
-**Demo clock.** `DEMO_DAY_SECS` (default 60) is how long one calendar day lasts on-chain. A stay three days ahead checks in three minutes after booking, so the whole lifecycle fits in a demo. Set it to `86400` for real time. The 7-day arbiter window is not scaled.
+**Demo clock.** `DEMO_DAY_SECS` (default 60) is how long one calendar day lasts on-chain. `STAY_HOLD_DAYS` (default 1) controls how many calendar days after check-in the stay can be paid; it is scaled by the demo clock. A stay three days ahead checks in three minutes after booking, so the whole lifecycle fits in a demo. Set `DEMO_DAY_SECS=86400` for real time. The 7-day arbiter window is not scaled.
 
 **Signing.** In the demo, guests and hosts sign with local testnet keys. In production they approve in the MicoPay app (`/sign-requests`), the same path as MicoPay Café.
 

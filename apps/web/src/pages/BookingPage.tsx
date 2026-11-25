@@ -7,7 +7,7 @@ import { day, duration, mxn, short, usdc, when } from '../format';
 import { Button, Icon, Label } from '../ui';
 
 const EVENT: Record<string, string> = {
-  locked: 'Paid into escrow', cancel: 'Cancelled by the guest', host_cancel: 'Cancelled by the host', release: 'Released to the host',
+  locked: 'Paid into escrow', pay_stay: 'Stay paid to the host', cancel: 'Cancelled by the guest', host_cancel: 'Cancelled by the host', release: 'Released to the host',
   dispute: 'Guest reported a problem', claim_damage: 'Host claimed damage', resolve: 'Arbiter split the escrow', settle_default: 'Paid out by default after the deadline',
 };
 
@@ -29,7 +29,11 @@ export default function BookingPage({ onChange }: { onChange: () => void }) {
   const ledger = now + skew;
   const checkIn = Number(b.chain_check_in), deadline = Number(b.chain_deadline);
   const phase = ledger < checkIn ? 'before' : ledger < deadline ? 'stay' : 'after';
-  const open = b.status === 'locked';
+  const open = b.status === 'locked' || b.status === 'stay_paid';
+  const stayPaid = b.chain_stay_paid || b.status === 'stay_paid' || b.status === 'released';
+  const cancelled = b.status === 'cancelled';
+  const claimsClosed = ledger >= deadline || cancelled || b.status === 'released' || b.status === 'resolved';
+  const stayPaidAt = Number(b.chain_stay_paid_at);
   const who = persona?.kind;
   const mine = (who === 'guest' && persona?.kind === 'guest' && persona.user.id === b.guest_id) || (who === 'host' && persona?.kind === 'host' && persona.user.id === b.host_id);
 
@@ -69,15 +73,17 @@ export default function BookingPage({ onChange }: { onChange: () => void }) {
         </div>
 
         <Panel title={<span className="flex items-center justify-between">Escrow on Stellar <StatusBadge s={b.status} /></span>}>
-          <ol className="grid grid-cols-3 gap-2 text-[13px]">
+          <ol className="grid gap-2 text-[13px] sm:grid-cols-3">
             {[
-              { t: 'Booked', at: null, done: true },
-              { t: 'Check-in', at: checkIn, done: ledger >= checkIn },
-              { t: 'Claims close', at: deadline, done: ledger >= deadline },
+              { t: cancelled ? 'Booking cancelled' : 'Check-in', at: checkIn, done: ledger >= checkIn || cancelled },
+              { t: 'Stay paid to host', at: stayPaidAt, done: stayPaid },
+              { t: 'Claims close', at: deadline, done: claimsClosed },
             ].map((s) => (
               <li key={s.t} className={`rounded-sm border-2 border-tinta px-2.5 py-2 ${s.done ? 'bg-tinta text-papel' : 'bg-fondo'}`}>
                 <div className="font-bold">{s.t}</div>
-                <div className={`num ${s.done ? 'text-gris-3' : 'text-gris'}`}>{s.at === null ? 'done' : s.done ? 'reached' : `in ${duration(s.at - ledger)}`}</div>
+                <div className={`num ${s.done ? 'text-gris-3' : 'text-gris'}`}>{s.done
+                  ? s.t === 'Stay paid to host' ? when(new Date(s.at * 1000).toISOString()) : 'done'
+                  : `in ${duration(s.at - ledger)}`}</div>
               </li>
             ))}
           </ol>
@@ -87,7 +93,7 @@ export default function BookingPage({ onChange }: { onChange: () => void }) {
             <Row k="Stay (to the host)" v={<>{mxn(b.subtotal_mxn)} <span className="text-gris">· {usdc(b.amount_token)}</span></>} />
             <Row k="MicoPay fee" v={<>{mxn(b.fee_mxn)} <span className="text-gris">· {usdc(b.fee_token)}</span></>} />
             <Row k="Damage deposit" v={<>{mxn(b.deposit_mxn)} <span className="text-gris">· {usdc(b.deposit_token)}</span></>} />
-            <Row strong k="Locked" v={mxn(b.total_mxn)} />
+            <Row strong k={stayPaid ? 'Total at booking' : 'Locked'} v={mxn(b.total_mxn)} />
             <div className="text-right text-[12px] text-gris num">1 USD = {Number(b.fx_rate).toFixed(4)} MXN at booking</div>
           </div>
           {b.chain && (
@@ -113,7 +119,9 @@ export default function BookingPage({ onChange }: { onChange: () => void }) {
 
       <div className="min-w-0 space-y-4 lg:sticky lg:top-4 lg:self-start">
         <ErrorBox msg={err} />
-        {!open && b.status !== 'disputed' && <Panel title="Closed"><p>This booking is settled. Every movement is in the history with its Stellar transaction.</p></Panel>}
+        {b.status === 'cancelled' && <Panel title="Cancelled"><p>The booking was cancelled and the guest's refund was processed. Every movement is in the history with its Stellar transaction.</p></Panel>}
+        {b.status === 'released' && <Panel title="Paid out"><p>The host received the stay payment and the guest's deposit has been returned.</p></Panel>}
+        {b.status === 'resolved' && <Panel title="Resolved"><p>The arbiter's decision has been paid out. Every movement is in the history with its Stellar transaction.</p></Panel>}
 
         {who === 'guest' && mine && open && phase === 'before' && (
           <Panel title="Cancel">
@@ -123,8 +131,12 @@ export default function BookingPage({ onChange }: { onChange: () => void }) {
         )}
         {who === 'guest' && mine && open && phase !== 'before' && (
           <Panel title="Your stay">
-            <p className="text-[15px]">Everything fine? Release the payment and get your deposit back now. If you do nothing, the contract pays the host when claims close.</p>
-            <Button block className="mt-3" disabled={!!busy} onClick={() => run('release', { by: 'guest' })}>{busy === 'release' ? 'Releasing…' : 'Release payment to host'}</Button>
+            <p className="text-[15px]">{stayPaid
+              ? 'The deposit is still held and is returned when claims close or when you release it.'
+              : ledger < stayPaidAt
+                ? <>Something wrong with the place? Report it before {when(new Date(stayPaidAt * 1000).toISOString())}; after that the host is paid for the stay.</>
+                : 'The stay hold has ended. The host can be paid now; the damage deposit will remain in escrow through the claims window.'}</p>
+            {stayPaid && phase !== 'after' && <Button block className="mt-3" disabled={!!busy} onClick={() => run('release', { by: 'guest' })}>{busy === 'release' ? 'Releasing…' : 'Release the deposit'}</Button>}
             {phase === 'stay' && <Button variant="ghost" block className="mt-3" disabled={!!busy} onClick={() => run('dispute')}>{busy === 'dispute' ? 'Opening…' : 'Report a problem'}</Button>}
           </Panel>
         )}
@@ -134,39 +146,49 @@ export default function BookingPage({ onChange }: { onChange: () => void }) {
               <p className="text-[15px]">Something damaged? Claim it before claims close: the arbiter decides how the deposit is split.</p>
               <Button variant="ghost" block className="mt-3" disabled={!!busy} onClick={() => run('claim-damage')}>{busy === 'claim-damage' ? 'Claiming…' : 'Claim damage'}</Button>
             </>}
-            {phase === 'before' && <p className="text-[15px]">You are paid {mxn(b.subtotal_mxn)} after check-in.</p>}
-            <Button variant="peligro" block className="mt-3" disabled={!!busy} onClick={() => run('host-cancel')}>{busy === 'host-cancel' ? 'Cancelling…' : 'Cancel and refund the guest in full'}</Button>
+            {phase === 'before' && <p className="text-[15px]">You are paid {mxn(b.subtotal_mxn)} after the stay hold ends.</p>}
+            {phase === 'before' && <Button variant="peligro" block className="mt-3" disabled={!!busy} onClick={() => run('host-cancel')}>{busy === 'host-cancel' ? 'Cancelling…' : 'Cancel and refund the guest in full'}</Button>}
+          </Panel>
+        )}
+        {open && b.status === 'locked' && ledger >= stayPaidAt && (
+          <Panel title="Stay payment">
+            <p className="text-[15px]">The stay hold has ended. The host can now be paid; the deposit remains in escrow through the claims window.</p>
+            <Button block className="mt-3" disabled={!!busy} onClick={() => run('pay-stay')}>{busy === 'pay-stay' ? 'Paying the host…' : 'Pay the host'}</Button>
           </Panel>
         )}
         {who === 'arbiter' && b.status === 'disputed' && (
           <Panel title="Resolve dispute">
-            <p className="text-[14px] text-gris">Split the {mxn(b.total_mxn)} in escrow. The platform can keep at most its fee.</p>
+            <p className="text-[14px] text-gris">{stayPaid
+              ? <>Split the {mxn(b.deposit_mxn)} deposit only. The platform share is fixed at MX$0.00.</>
+              : <>Split the {mxn(b.total_mxn)} in escrow. The platform can keep at most its fee.</>}</p>
             {(['guest', 'host', 'platform'] as const).map((k) => (
               <label key={k} className="mt-2 block text-[13px] font-bold capitalize text-gris">To {k} (MXN)
-                <input inputMode="decimal" value={split?.[k] ?? ''} placeholder="0.00"
+                <input inputMode="decimal" value={stayPaid && k === 'platform' ? '0.00' : split?.[k] ?? ''} readOnly={stayPaid && k === 'platform'} placeholder="0.00"
                   onChange={(e) => setSplit({ guest: split?.guest ?? '', host: split?.host ?? '', platform: split?.platform ?? '', [k]: e.target.value })}
                   className="mt-1 min-h-12 w-full rounded-sm border-2 border-tinta bg-fondo px-3 text-[16px] text-tinta" />
               </label>
             ))}
-            <Button variant="ghost" className="mt-2" onClick={() => setSplit({ guest: b.deposit_mxn, host: b.subtotal_mxn, platform: b.fee_mxn })}>Fill: no damage</Button>
-            {splitSum && <div className={`mt-2 num text-[14px] ${splitSum.eq(total) ? 'text-verde' : 'text-rojo'}`}>Sum {mxn(splitSum.toFixed(2))} of {mxn(b.total_mxn)}</div>}
-            <Button block className="mt-3" disabled={!!busy || !splitSum?.eq(total) || new Big(split?.platform || 0).gt(b.fee_mxn)} onClick={() => run('resolve', { split })}>
+            <Button variant="ghost" className="mt-2" onClick={() => setSplit(stayPaid
+              ? { guest: b.deposit_mxn, host: '0.00', platform: '0.00' }
+              : { guest: b.deposit_mxn, host: b.subtotal_mxn, platform: b.fee_mxn })}>Fill: no damage</Button>
+            {splitSum && <div className={`mt-2 num text-[14px] ${splitSum.eq(stayPaid ? b.deposit_mxn : total) ? 'text-verde' : 'text-rojo'}`}>Sum {mxn(splitSum.toFixed(2))} of {mxn(stayPaid ? b.deposit_mxn : b.total_mxn)}</div>}
+            <Button block className="mt-3" disabled={!!busy || !splitSum?.eq(stayPaid ? b.deposit_mxn : total) || (stayPaid ? new Big(split?.platform || 0).gt(0) : new Big(split?.platform || 0).gt(b.fee_mxn))} onClick={() => run('resolve', { split })}>
               {busy === 'resolve' ? 'Paying out…' : 'Resolve and pay out'}
             </Button>
           </Panel>
         )}
-        {who === 'arbiter' && open && phase !== 'before' && (
+        {who === 'arbiter' && stayPaid && open && phase !== 'before' && phase !== 'after' && (
           <Panel title="Arbiter">
-            <Button variant="ghost" block disabled={!!busy} onClick={() => run('release', { by: 'arbiter' })}>{busy === 'release' ? 'Releasing…' : 'Release to host'}</Button>
+            <Button variant="ghost" block disabled={!!busy} onClick={() => run('release', { by: 'arbiter' })}>{busy === 'release' ? 'Releasing…' : 'Release the deposit'}</Button>
           </Panel>
         )}
-        {open && phase === 'after' && (
+        {(open || b.status === 'disputed') && phase === 'after' && (
           <Panel title="Claims closed">
-            <p className="text-[15px]">Nobody acted, so anyone can finish it: the host gets the stay, the guest the deposit.</p>
+            <p className="text-[15px]">Claims have closed. Anyone can settle the booking; the host gets the stay and the guest gets the deposit.</p>
             <Button block className="mt-3" disabled={!!busy} onClick={() => run('settle-default')}>{busy === 'settle-default' ? 'Paying out…' : 'Settle by default'}</Button>
           </Panel>
         )}
-        {b.status === 'disputed' && who !== 'arbiter' && <Panel title="In dispute"><p>MicoPay is reviewing it. If the arbiter doesn't decide within 7 days, the contract pays out by default.</p></Panel>}
+        {b.status === 'disputed' && who !== 'arbiter' && <Panel title="In dispute"><p>{stayPaid ? 'The host has been paid for the stay. The damage deposit remains in escrow while MicoPay reviews the claim.' : 'The payment is still in escrow while MicoPay reviews the claim.'} If the arbiter doesn't decide within 7 days, the contract pays out by default.</p></Panel>}
       </div>
     </div>
   );

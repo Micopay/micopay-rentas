@@ -21,6 +21,9 @@ export const FEE_RATE = process.env.FEE_RATE ?? '0.03';
 /** Days after check-out in which guest or host can open a dispute. */
 export const CLAIM_DAYS = 2;
 
+/** Calendar days after check-in before the host's stay payment can be released. */
+export const STAY_HOLD_DAYS = Number(process.env.STAY_HOLD_DAYS ?? 1);
+
 /** Testnet-only keys written by the seed. Never real funds. */
 export interface TestnetKeys {
   contractId: string;

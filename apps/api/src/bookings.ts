@@ -9,7 +9,7 @@ import { chainTiers, chainTimes, nightsBetween, quote, type Policy } from './quo
 
 export class BookingError extends Error {}
 
-const ACTIVE = `('locked', 'disputed', 'released', 'resolved')`;
+const ACTIVE = `('locked', 'stay_paid', 'disputed', 'released', 'resolved')`;
 
 export async function isAvailable(db: Db, listingId: number, checkIn: string, checkOut: string): Promise<boolean> {
   const r = await db.query(
@@ -66,28 +66,28 @@ export async function createBooking(db: Db, input: { listingId: number; guestId:
   const res = await invoke(keys.contractId, signerFor(guest.stellar_address), 'lock', [
     sv.bytes32(escrowId), sv.address(guest.stellar_address), sv.address(l.host_address),
     sv.i128(toStroops(token.amount)), sv.i128(toStroops(token.fee)), sv.i128(toStroops(token.deposit)),
-    sv.u64(times.checkInSec), sv.u64(times.deadlineSec), sv.tiers(tiers),
+    sv.u64(times.checkInSec), sv.u64(times.stayPaidAtSec - times.checkInSec), sv.u64(times.deadlineSec), sv.tiers(tiers),
   ]);
 
   const row = (await db.query<{ id: number }>(
     `INSERT INTO bookings (reference, listing_id, guest_id, check_in, check_out, nights, guests, nightly_mxn, cleaning_mxn, subtotal_mxn, fee_mxn,
-       deposit_mxn, total_mxn, fx_rate, amount_token, fee_token, deposit_token, policy, tiers, escrow_id, chain_check_in, chain_deadline, status)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,'locked') RETURNING id`,
+       deposit_mxn, total_mxn, fx_rate, amount_token, fee_token, deposit_token, policy, tiers, escrow_id, chain_check_in, chain_stay_paid_at, chain_deadline, status)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,'locked') RETURNING id`,
     [reference, l.id, guest.id, input.checkIn, input.checkOut, nights, input.guests, q.nightly, q.cleaning, q.subtotal, q.fee, q.deposit, q.total,
-      fx.rate, token.amount, token.fee, token.deposit, l.policy, JSON.stringify(tiers), escrowId, times.checkInSec, times.deadlineSec],
+      fx.rate, token.amount, token.fee, token.deposit, l.policy, JSON.stringify(tiers), escrowId, times.checkInSec, times.stayPaidAtSec, times.deadlineSec],
   )).rows[0]!;
   await event(db, row.id, 'locked', 'guest', res.hash, { totalToken: new Big(token.amount).plus(token.fee).plus(token.deposit).toFixed(5) });
   return { id: row.id, reference, txHash: res.hash, explorer: explorerTx(res.hash) };
 }
 
-type Action = 'cancel' | 'host_cancel' | 'release' | 'dispute' | 'claim_damage' | 'resolve' | 'settle_default';
+type Action = 'cancel' | 'host_cancel' | 'pay_stay' | 'release' | 'dispute' | 'claim_damage' | 'resolve' | 'settle_default';
 
 const ACTOR: Record<Action, 'guest' | 'host' | 'arbiter' | 'anyone'> = {
-  cancel: 'guest', host_cancel: 'host', release: 'guest', dispute: 'guest', claim_damage: 'host', resolve: 'arbiter', settle_default: 'anyone',
+  cancel: 'guest', host_cancel: 'host', pay_stay: 'anyone', release: 'guest', dispute: 'guest', claim_damage: 'host', resolve: 'arbiter', settle_default: 'anyone',
 };
 
 const STATUS: Record<ChainBooking['status'], string> = {
-  Locked: 'locked', Disputed: 'disputed', Released: 'released', Cancelled: 'cancelled', Resolved: 'resolved',
+  Locked: 'locked', StayPaid: 'stay_paid', Disputed: 'disputed', Released: 'released', Cancelled: 'cancelled', Resolved: 'resolved',
 };
 
 /** Runs one escrow step. `by` lets the arbiter release instead of the guest. */
@@ -113,10 +113,15 @@ export async function act(db: Db, id: number, action: Action, opts: { by?: 'gues
     // host's share absorbs the last stroop.
     const chain = await getBooking(keys.contractId, arbiter.publicKey(), b.escrow_id);
     if (!chain) throw new BookingError('Booking not in escrow');
-    const total = toStroops(chain.amount) + toStroops(chain.fee) + toStroops(chain.deposit);
+    const paidEvent = (await db.query<{ paid: boolean }>(
+      `SELECT EXISTS (SELECT 1 FROM booking_events WHERE booking_id = $1 AND kind = 'pay_stay') AS paid`, [id],
+    )).rows[0]!.paid;
+    const stayPaid = chain.status === 'StayPaid' || paidEvent;
+    const total = stayPaid ? toStroops(chain.deposit) : toStroops(chain.amount) + toStroops(chain.fee) + toStroops(chain.deposit);
     const g = toStroops(s.guest), p = toStroops(s.platform);
     const h = total - g - p;
     if (h < 0n) throw new BookingError('The split is larger than the escrow');
+    if (stayPaid && (p !== 0n || g + toStroops(s.host) !== toStroops(chain.deposit))) throw new BookingError('After the stay is paid, only the deposit can be split and the platform share must be 0');
     args.push(sv.i128(g), sv.i128(h), sv.i128(p));
     details = { split: opts.split };
   }

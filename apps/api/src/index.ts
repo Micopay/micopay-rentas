@@ -2,7 +2,7 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import { Horizon, Keypair } from '@stellar/stellar-sdk';
 import { act, BookingError, createBooking, EscrowError, isAvailable } from './bookings.js';
-import { DAY_SECS, FEE_RATE, HORIZON_URL, loadKeys, PG_DIR } from './config.js';
+import { DAY_SECS, FEE_RATE, HORIZON_URL, loadKeys, PG_DIR, STAY_HOLD_DAYS } from './config.js';
 import { openDb } from './db.js';
 import { explorerContract, explorerTx, getBooking, ledgerTime } from './escrow.js';
 import { usdcMxnRate } from './fx.js';
@@ -35,7 +35,7 @@ app.get('/api/config', async () => {
   const fx = await usdcMxnRate().catch(() => null);
   return {
     contractId: keys.contractId, contractExplorer: explorerContract(keys.contractId), asset: keys.asset,
-    daySecs: DAY_SECS, feeRate: FEE_RATE, fx, policies: POLICIES,
+    daySecs: DAY_SECS, feeRate: FEE_RATE, stayHoldDays: STAY_HOLD_DAYS, fx, policies: POLICIES,
     arbiter: Keypair.fromSecret(keys.arbiter).publicKey(), platform: Keypair.fromSecret(keys.platform).publicKey(),
   };
 });
@@ -51,7 +51,7 @@ app.get('/api/listings', async () =>
 app.get<{ Params: { slug: string } }>('/api/listings/:slug', async (req, reply) => {
   const l = (await db.query(`SELECT l.*, u.name AS host_name, u.bio AS host_bio, u.stellar_address AS host_address FROM listings l JOIN users u ON u.id = l.host_id WHERE l.slug = $1`, [req.params.slug])).rows[0];
   if (!l) return reply.status(404).send({ error: 'Listing not found' });
-  const booked = (await db.query(`SELECT check_in::text, check_out::text FROM bookings WHERE listing_id = $1 AND status IN ('locked','disputed','released','resolved') ORDER BY check_in`, [(l as { id: number }).id])).rows;
+  const booked = (await db.query(`SELECT check_in::text, check_out::text FROM bookings WHERE listing_id = $1 AND status IN ('locked','disputed','stay_paid','released','resolved') ORDER BY check_in`, [(l as { id: number }).id])).rows;
   return { ...l, booked };
 });
 
@@ -68,6 +68,7 @@ app.post<{ Body: { listingId: number; guestId: number; checkIn: string; checkOut
 
 const BOOKING_SQL = `
   SELECT b.*, b.check_in::text AS check_in, b.check_out::text AS check_out, l.title, l.slug, l.area, l.cover,
+         EXISTS (SELECT 1 FROM booking_events e WHERE e.booking_id = b.id AND e.kind = 'pay_stay') AS chain_stay_paid,
          g.name AS guest_name, g.stellar_address AS guest_address, h.name AS host_name, h.stellar_address AS host_address, h.id AS host_id
     FROM bookings b JOIN listings l ON l.id = b.listing_id JOIN users g ON g.id = b.guest_id JOIN users h ON h.id = l.host_id`;
 
@@ -91,7 +92,7 @@ app.get<{ Params: { id: string } }>('/api/bookings/:id', async (req, reply) => {
   return { ...b, chain, ledgerTime: now, events: events.rows.map((e) => ({ ...e, explorer: e.tx_hash ? explorerTx(e.tx_hash) : null })) };
 });
 
-for (const action of ['cancel', 'host_cancel', 'release', 'dispute', 'claim_damage', 'resolve', 'settle_default'] as const) {
+for (const action of ['cancel', 'host_cancel', 'pay_stay', 'release', 'dispute', 'claim_damage', 'resolve', 'settle_default'] as const) {
   app.post<{ Params: { id: string }; Body: { by?: 'guest' | 'arbiter'; split?: { guest: string; host: string; platform: string } } }>(
     `/api/bookings/:id/${action.replace('_', '-')}`, async (req) => act(db, Number(req.params.id), action, req.body ?? {}));
 }

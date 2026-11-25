@@ -1,5 +1,6 @@
 import { PGlite } from '@electric-sql/pglite';
 import { mkdirSync } from 'node:fs';
+import { DAY_SECS, STAY_HOLD_DAYS } from './config.js';
 
 /** Local development on PGlite (Postgres in WASM). Plain Postgres SQL, so it moves to AWS as is. */
 export type Db = PGlite;
@@ -54,6 +55,7 @@ CREATE TABLE IF NOT EXISTS bookings (
   tiers           JSONB NOT NULL,
   escrow_id       CHAR(64) NOT NULL UNIQUE,
   chain_check_in  BIGINT NOT NULL,
+  chain_stay_paid_at BIGINT NOT NULL,
   chain_deadline  BIGINT NOT NULL,
   status          TEXT NOT NULL,
   created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -74,5 +76,8 @@ export async function openDb(dir: string): Promise<Db> {
   mkdirSync(dir, { recursive: true });
   const db = new PGlite(dir);
   await db.exec(SCHEMA);
+  await db.exec(`ALTER TABLE bookings ADD COLUMN IF NOT EXISTS chain_stay_paid_at BIGINT`);
+  await db.query(`UPDATE bookings SET chain_stay_paid_at = chain_check_in + $1 WHERE chain_stay_paid_at IS NULL`, [STAY_HOLD_DAYS * DAY_SECS]);
+  await db.exec(`ALTER TABLE bookings ALTER COLUMN chain_stay_paid_at SET NOT NULL`);
   return db;
 }

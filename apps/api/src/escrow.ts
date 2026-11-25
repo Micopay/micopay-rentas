@@ -110,7 +110,8 @@ export interface ChainBooking {
   deposit: string;
   check_in: number;
   deadline: number;
-  status: 'Locked' | 'Disputed' | 'Released' | 'Cancelled' | 'Resolved';
+  status: 'Locked' | 'StayPaid' | 'Disputed' | 'Released' | 'Cancelled' | 'Resolved';
+  stay_paid_at: number;
 }
 
 export async function getBooking(contractId: string, source: string, escrowId: string): Promise<ChainBooking | null> {
@@ -124,6 +125,7 @@ export async function getBooking(contractId: string, source: string, escrowId: s
       deposit: fromStroops(b.deposit as bigint),
       check_in: Number(b.check_in),
       deadline: Number(b.deadline),
+      stay_paid_at: Number(b.stay_paid_at),
       status: (b.status as string[])[0] as ChainBooking['status'],
     };
   } catch (e) {
