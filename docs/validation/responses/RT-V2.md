@@ -25,17 +25,17 @@
 ## 3. Short-term rentals where you live
 
 - Your country / general region (no city or address needed).
-  > 
+  > Not answered.
 - Where you live, how do people rent homes for short stays? (Airbnb, Booking, other platforms, social media groups, renting directly…)
-  > 
+  > Not answered.
 - What fees do guests or hosts notice, and what do they think of them? A percentage is fine; no amounts of money.
-  > 
+  > Not answered.
 - Do people book directly with the host? What makes them trust or distrust doing that?
-  > 
+  > Not answered.
 - Are there common problems with cancellations, damage deposits or disputes?
-  > 
+  > Not answered.
 - Do you live this yourself (as a guest or host), see it up close, or only hear about it?
-  > 
+  > Not answered.
 
 ## 4. Value
 
@@ -46,7 +46,7 @@
 - What is missing?
   > A way to submit evidence for a damage claim, and a clear host payout time. The Hosting screen shows money as "Waiting in escrow — Paid out after each check-in", but the Booking page as host only mentions "claims close", so I cannot tell whether I am paid at check-in or at the end of the window. There is also no listing verification.
 - What would stop you (or the person in your issue's role) from using it?
-  > 
+  > Not answered.
 
 ## 5. The MicoPay app
 
