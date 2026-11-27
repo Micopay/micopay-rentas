@@ -1,12 +1,13 @@
 import { Link } from 'react-router-dom';
 import { api, type Booking } from '../api';
-import { Cover, ErrorBox, StatusBadge, usePersona } from '../comun';
+import { Cover, EmptyState, ErrorBox, Loading, MissingPersona, StatusBadge, usePersona } from '../comun';
 import { day, mxn } from '../format';
 import { useData } from '../useData';
 
-export function BookingList({ items, empty, who }: { items: Booking[] | null; empty: string; who: 'guest' | 'host' | 'arbiter' }) {
+export function BookingList({ items, loading, empty, who }: { items: Booking[] | null; loading?: boolean; empty: string; who: 'guest' | 'host' | 'arbiter' }) {
+  if (loading) return <Loading />;
   if (!items) return null;
-  if (items.length === 0) return <div className="text-gris">{empty}</div>;
+  if (items.length === 0) return <EmptyState message={empty} />;
   return (
     <div className="space-y-3">
       {items.map((b) => (
@@ -30,12 +31,13 @@ export function BookingList({ items, empty, who }: { items: Booking[] | null; em
 export default function Trips() {
   const { persona } = usePersona();
   const guestId = persona?.kind === 'guest' ? persona.user.id : undefined;
-  const { data, error } = useData(() => (guestId ? api.bookings({ guestId }) : Promise.resolve(null)), [guestId]);
+  const { data, loading, error, reload } = useData(() => (guestId ? api.bookings({ guestId }) : Promise.resolve(null)), [guestId]);
+  if (!guestId) return <MissingPersona type="guest" />;
   return (
     <div className="space-y-4">
       <h1 className="font-display text-[32px] font-extrabold">My trips</h1>
-      <ErrorBox msg={error} />
-      <BookingList items={data} who="guest" empty="No trips yet." />
+      <ErrorBox msg={error} onRetry={reload} />
+      <BookingList items={data} loading={loading} who="guest" empty="No trips yet." />
     </div>
   );
 }

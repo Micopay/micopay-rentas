@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, NavLink, Route, Routes } from 'react-router-dom';
 import { api, type Config, type User } from './api';
-import { PersonaCtx, type Persona } from './comun';
+import { ErrorBox, PersonaCtx, type Persona } from './comun';
 import { usdc } from './format';
 import Home from './pages/Home';
 import ListingPage from './pages/ListingPage';
@@ -17,11 +17,20 @@ const write = (v: string) => { try { localStorage.setItem(KEY, v); } catch { /* 
 export default function App() {
   const [users, setUsers] = useState<User[]>([]);
   const [config, setConfig] = useState<Config | null>(null);
+  const [usersError, setUsersError] = useState<string | null>(null);
+  const [configError, setConfigError] = useState<string | null>(null);
   const [who, setWho] = useState<string>(read() ?? 'guest');
 
-  const reloadUsers = () => api.users().then(setUsers).catch(() => {});
+  const reloadUsers = () => {
+    setUsersError(null);
+    api.users().then(setUsers).catch((e: Error) => setUsersError(e.message));
+  };
+  const reloadConfig = () => {
+    setConfigError(null);
+    api.config().then(setConfig).catch((e: Error) => setConfigError(e.message));
+  };
   useEffect(() => {
-    api.config().then(setConfig).catch(() => {});
+    reloadConfig();
     reloadUsers();
     const t = setInterval(reloadUsers, 15_000);
     return () => clearInterval(t);
@@ -52,9 +61,11 @@ export default function App() {
               {persona?.kind === 'arbiter' && <NavLink to="/disputes" className={nav}>Disputes</NavLink>}
             </nav>
             <div className="ml-auto flex items-center gap-3">
-              {persona && persona.kind !== 'arbiter' && (
+              {usersError ? (
+                <button onClick={reloadUsers} className="min-h-12 px-2 text-[13px] font-bold text-rojo underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-rojo">Failed to load users · Retry</button>
+              ) : persona && persona.kind !== 'arbiter' ? (
                 <span className="num text-[13px] text-gris">{persona.user.balance ? usdc(persona.user.balance) : '—'}</span>
-              )}
+              ) : null}
               <label className="flex min-w-0 items-center gap-2 text-[13px] font-bold">
                 <span className="hidden sm:inline">Acting as</span>
                 <select value={who} onChange={(e) => pick(e.target.value)} className="min-h-10 max-w-[200px] rounded-sm border-2 border-tinta bg-fondo px-2 text-[14px]">
@@ -65,6 +76,7 @@ export default function App() {
               </label>
             </div>
           </div>
+          {configError && <div className="border-t-2 border-tinta bg-rojo-suave px-4 py-1.5 text-center text-[12px] font-bold text-rojo">Failed to load config. <button onClick={reloadConfig} className="min-h-12 min-w-12 px-2 underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-rojo">Retry</button></div>}
           {config && config.daySecs < 86_400 && (
             <div className="border-t-2 border-tinta bg-aviso px-4 py-1.5 text-center text-[12px] font-bold text-aviso-texto">
               Testnet demo · demo clock: 1 calendar day = {config.daySecs} s on-chain, so check-in and payouts happen within minutes

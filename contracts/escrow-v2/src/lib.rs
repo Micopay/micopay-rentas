@@ -7,9 +7,10 @@
 //! Timeline (ledger timestamps, seconds):
 //!
 //! ```text
-//! lock ──── check_in ─────────────── deadline ──────────── deadline + arbiter_window
-//!  │ cancel (policy refund)  │ release / dispute │ settle_default        │ settle_default
-//!  │ host_cancel (full refund, any time while Locked)                     │ (also if Disputed)
+//! lock ──── check_in ── check_in + stay_hold ── deadline ── deadline + arbiter_window
+//!  │ cancel (policy refund)   │ pay_stay            │ settle_default │ settle_default
+//!  │ host_cancel              │ guest dispute       │ (deposit only after stay paid)
+//!                             │ damage claim / release can finish earlier
 //! ```
 #![no_std]
 
@@ -59,6 +60,10 @@ fn payout_stay(env: &Env, cfg: &Config, b: &Booking) {
     pay(env, cfg, &b.payer, b.deposit);
 }
 
+fn payout_deposit(env: &Env, cfg: &Config, b: &Booking) {
+    pay(env, cfg, &b.payer, b.deposit);
+}
+
 /// Refund share for a cancellation made `secs_before` seconds before check-in.
 /// Tiers are sorted by `min_secs_before` descending; the first one that applies wins.
 fn refund_bps(policy: &Vec<Tier>, secs_before: u64) -> u32 {
@@ -104,6 +109,7 @@ impl EscrowV2 {
         fee: i128,
         deposit: i128,
         check_in: u64,
+        stay_hold_secs: u64,
         deadline: u64,
         policy: Vec<Tier>,
     ) -> Result<(), EscrowError> {
@@ -120,6 +126,9 @@ impl EscrowV2 {
         }
         let now = env.ledger().timestamp();
         if check_in <= now || deadline <= check_in {
+            return Err(EscrowError::InvalidDates);
+        }
+        if check_in.checked_add(stay_hold_secs).ok_or(EscrowError::InvalidDates)? > deadline {
             return Err(EscrowError::InvalidDates);
         }
         if policy.len() > MAX_TIERS {
@@ -142,7 +151,7 @@ impl EscrowV2 {
         let total = amount.checked_add(fee).and_then(|v| v.checked_add(deposit)).ok_or(EscrowError::InvalidAmount)?;
         token::Client::new(&env, &cfg.token).transfer(&payer, &env.current_contract_address(), &total);
 
-        let b = Booking { payer: payer.clone(), beneficiary: beneficiary.clone(), amount, fee, deposit, check_in, deadline, policy, status: Status::Locked };
+        let b = Booking { payer: payer.clone(), beneficiary: beneficiary.clone(), amount, fee, deposit, check_in, stay_hold_secs, deadline, stay_paid: false, policy, status: Status::Locked };
         save(&env, &id, &b);
         env.events().publish((symbol_short!("locked"), id), (payer, beneficiary, total, check_in, deadline));
         Ok(())
@@ -197,7 +206,7 @@ impl EscrowV2 {
     pub fn release(env: Env, id: BytesN<32>, by: Address) -> Result<(), EscrowError> {
         let cfg = config(&env)?;
         let mut b = load(&env, &id)?;
-        if b.status != Status::Locked {
+        if b.status != Status::Locked && b.status != Status::StayPaid {
             return Err(EscrowError::NotLocked);
         }
         if by != b.payer && by != cfg.arbiter {
@@ -207,7 +216,11 @@ impl EscrowV2 {
         if env.ledger().timestamp() < b.check_in {
             return Err(EscrowError::TooEarly);
         }
-        payout_stay(&env, &cfg, &b);
+        if b.stay_paid {
+            payout_deposit(&env, &cfg, &b);
+        } else {
+            payout_stay(&env, &cfg, &b);
+        }
         b.status = Status::Released;
         save(&env, &id, &b);
         env.events().publish((symbol_short!("released"), id), by);
@@ -226,7 +239,8 @@ impl EscrowV2 {
         if now < b.check_in {
             return Err(EscrowError::TooEarly);
         }
-        if now >= b.deadline {
+        let stay_payment_at = b.check_in.checked_add(b.stay_hold_secs).ok_or(EscrowError::InvalidDates)?;
+        if now >= stay_payment_at {
             return Err(EscrowError::TooLate);
         }
         b.status = Status::Disputed;
@@ -238,7 +252,7 @@ impl EscrowV2 {
     /// Host claims part of the deposit for damage; same effect as a guest dispute.
     pub fn claim_damage(env: Env, id: BytesN<32>) -> Result<(), EscrowError> {
         let mut b = load(&env, &id)?;
-        if b.status != Status::Locked {
+        if b.status != Status::Locked && b.status != Status::StayPaid {
             return Err(EscrowError::NotLocked);
         }
         b.beneficiary.require_auth();
@@ -267,7 +281,11 @@ impl EscrowV2 {
         if to_payer < 0 || to_beneficiary < 0 || to_platform < 0 || to_platform > b.fee {
             return Err(EscrowError::InvalidSplit);
         }
-        if to_payer + to_beneficiary + to_platform != b.amount + b.fee + b.deposit {
+        let split_total = to_payer.checked_add(to_beneficiary).and_then(|v| v.checked_add(to_platform));
+        let expected_total = if b.stay_paid { b.deposit } else { b.amount + b.fee + b.deposit };
+        if (b.stay_paid && to_platform != 0)
+            || split_total != Some(expected_total)
+        {
             return Err(EscrowError::InvalidSplit);
         }
         pay(&env, &cfg, &b.payer, to_payer);
@@ -289,13 +307,39 @@ impl EscrowV2 {
         match b.status {
             Status::Locked if now >= b.deadline => {}
             Status::Disputed if now >= b.deadline.saturating_add(cfg.arbiter_window_secs) => {}
+            Status::StayPaid if now >= b.deadline => {}
+            Status::StayPaid if now < b.deadline => return Err(EscrowError::TooEarly),
             Status::Locked | Status::Disputed => return Err(EscrowError::TooEarly),
             _ => return Err(EscrowError::NotLocked),
         }
-        payout_stay(&env, &cfg, &b);
+        if b.stay_paid {
+            payout_deposit(&env, &cfg, &b);
+        } else {
+            payout_stay(&env, &cfg, &b);
+        }
         b.status = Status::Released;
         save(&env, &id, &b);
         env.events().publish((symbol_short!("default"), id), ());
+        Ok(())
+    }
+
+    /// Anyone can pay the host and platform once the post-check-in hold has elapsed.
+    pub fn pay_stay(env: Env, id: BytesN<32>) -> Result<(), EscrowError> {
+        let cfg = config(&env)?;
+        let mut b = load(&env, &id)?;
+        if b.status != Status::Locked {
+            return Err(EscrowError::NotLocked);
+        }
+        let stay_payment_at = b.check_in.checked_add(b.stay_hold_secs).ok_or(EscrowError::InvalidDates)?;
+        if env.ledger().timestamp() < stay_payment_at {
+            return Err(EscrowError::TooEarly);
+        }
+        pay(&env, &cfg, &b.beneficiary, b.amount);
+        pay(&env, &cfg, &cfg.platform_wallet, b.fee);
+        b.stay_paid = true;
+        b.status = Status::StayPaid;
+        save(&env, &id, &b);
+        env.events().publish((symbol_short!("staypaid"), id), (b.amount, b.fee));
         Ok(())
     }
 

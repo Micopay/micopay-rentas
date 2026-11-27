@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api, type Quote } from '../api';
 import { Cover, ErrorBox, Panel, Row, usePersona } from '../comun';
 import { day, isoDay, mxn, usdc } from '../format';
 import { Badge, Button, Label } from '../ui';
+import Calendar, { crossesBooked } from '../ui/Calendar';
 import { useData } from '../useData';
 
 export default function ListingPage() {
@@ -13,16 +14,31 @@ export default function ListingPage() {
   const nav = useNavigate();
   const [checkIn, setCheckIn] = useState(isoDay(3));
   const [checkOut, setCheckOut] = useState(isoDay(5));
+
+  const isRangeValid = (start: string, end: string) => !start || !end || !crossesBooked(l?.booked ?? [], start, end);
   const [guests, setGuests] = useState(2);
   const [q, setQ] = useState<Quote | null>(null);
   const [qErr, setQErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const quoteReqRef = useRef(0);
+  const [quoteDates, setQuoteDates] = useState<{ checkIn: string; checkOut: string } | null>(null);
 
   useEffect(() => {
     if (!l) return;
     setQErr(null);
-    api.quote(l.id, checkIn, checkOut).then(setQ).catch((e: Error) => { setQ(null); setQErr(e.message); });
+    if (!checkIn || !checkOut) { setQ(null); setQuoteDates(null); return; }
+    setQ(null);
+    setQuoteDates(null);
+    const reqId = ++quoteReqRef.current;
+    api.quote(l.id, checkIn, checkOut).then((quote) => {
+      if (reqId === quoteReqRef.current) {
+        setQ(quote);
+        setQuoteDates({ checkIn, checkOut });
+      }
+    }).catch((e: Error) => {
+      if (reqId === quoteReqRef.current) { setQ(null); setQErr(e.message); }
+    });
   }, [l, checkIn, checkOut]);
 
   if (error) return <ErrorBox msg={error} />;
@@ -37,7 +53,14 @@ export default function ListingPage() {
       const r = await api.book({ listingId: l.id, guestId: persona.user.id, checkIn, checkOut, guests });
       nav(`/bookings/${r.id}`);
     } catch (e) {
-      setErr((e as Error).message);
+      const errMsg = (e as Error).message;
+      if (errMsg === 'Those dates are already booked') {
+        setErr('Those dates are no longer available. Please choose different dates.');
+        setQ(null);
+        setQuoteDates(null);
+      } else {
+        setErr(errMsg);
+      }
       reload();
     } finally {
       setBusy(false);
@@ -75,10 +98,24 @@ export default function ListingPage() {
         <Panel title={<span className="num">{mxn(l.nightly_mxn)} / night</span>}>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <label className="text-[13px] font-bold text-gris">Check-in
-              <input type="date" value={checkIn} min={isoDay(1)} onChange={(e) => setCheckIn(e.target.value)} className="mt-1 min-h-12 w-full rounded-sm border-2 border-tinta bg-fondo px-2 text-[16px] text-tinta" />
+              <input type="date" value={checkIn} min={isoDay(1)} onChange={(e) => {
+                const newCheckIn = e.target.value;
+                // If check-out is set, validate the new range
+                if (checkOut && !isRangeValid(newCheckIn, checkOut)) {
+                  setCheckOut(''); // Clear check-out if range becomes invalid
+                }
+                setCheckIn(newCheckIn);
+              }} className="mt-1 min-h-12 w-full rounded-sm border-2 border-tinta bg-fondo px-2 text-[16px] text-tinta" />
             </label>
             <label className="text-[13px] font-bold text-gris">Check-out
-              <input type="date" value={checkOut} min={checkIn} onChange={(e) => setCheckOut(e.target.value)} className="mt-1 min-h-12 w-full rounded-sm border-2 border-tinta bg-fondo px-2 text-[16px] text-tinta" />
+              <input type="date" value={checkOut} min={checkIn} onChange={(e) => {
+                const newCheckOut = e.target.value;
+                // Validate the range before accepting
+                if (newCheckOut && !isRangeValid(checkIn, newCheckOut)) {
+                  return; // Reject invalid range
+                }
+                setCheckOut(newCheckOut);
+              }} className="mt-1 min-h-12 w-full rounded-sm border-2 border-tinta bg-fondo px-2 text-[16px] text-tinta" />
             </label>
             <label className="sm:col-span-2 text-[13px] font-bold text-gris">Guests
               <input type="number" min={1} max={l.max_guests} value={guests} onChange={(e) => setGuests(Number(e.target.value))} className="mt-1 min-h-12 w-full rounded-sm border-2 border-tinta bg-fondo px-2 text-[16px] text-tinta" />
@@ -100,13 +137,22 @@ export default function ListingPage() {
           )}
           {q && !q.available && <div className="mt-3"><ErrorBox msg="Those dates are already booked" /></div>}
           <div className="mt-3"><ErrorBox msg={qErr ?? err} /></div>
-          {l.booked && l.booked.length > 0 && (
-            <div className="mt-3 text-[12px] text-gris">Booked: {l.booked.map((b) => `${day(b.check_in)} → ${day(b.check_out)}`).join(' · ')}</div>
-          )}
+
+          <div className="mt-4">
+            <Calendar
+              booked={l.booked ?? []}
+              checkIn={checkIn}
+              checkOut={checkOut}
+              onCheckInChange={setCheckIn}
+              onCheckOutChange={setCheckOut}
+              minDate={isoDay(1)}
+            />
+          </div>
+
 
           <div className="mt-4">
             {isGuest ? (
-              <Button block disabled={!q || !q.available || busy} onClick={book}>
+              <Button block disabled={!q || !q.available || busy || quoteDates?.checkIn !== checkIn || quoteDates?.checkOut !== checkOut} onClick={book}>
                 {busy ? 'Locking in escrow on Stellar…' : 'Book and pay into escrow'}
               </Button>
             ) : (

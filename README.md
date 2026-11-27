@@ -23,7 +23,7 @@ MicoPay Rentas is part of the [MicoPay](https://github.com/Micopay) ecosystem. *
    - If the host cancels, the guest gets everything back.
 3. **After check-in.** The guest can report a problem during the stay hold. Once the hold ends (one calendar day by default), anyone can pay the host for the stay and fee; the damage deposit remains in escrow.
 4. **Claims and disputes.** Until claims close, the guest can release the deposit or report a problem, and the host can claim damage. The arbiter (MicoPay) can split the deposit after the stay has been paid, but cannot take any platform fee from that deposit.
-5. **Nobody acts.** After claims close, anyone can settle: the guest gets the deposit back. A dispute the arbiter doesn't decide within 7 days settles the same way, so funds are never stuck.
+5. **Nobody acts.** After claims close, anyone can settle: the host gets the stay if it was not paid yet, and the guest gets the deposit back. A dispute the arbiter doesn't decide within 7 days settles the same way, so funds are never stuck.
 
 ## Contract: `contracts/escrow-v2`
 

@@ -1,12 +1,12 @@
 import { Link } from 'react-router-dom';
 import { api } from '../api';
-import { Cover, ErrorBox, usePersona } from '../comun';
+import { Cover, EmptyState, ErrorBox, Loading, usePersona } from '../comun';
 import { mxn } from '../format';
 import { Label } from '../ui';
 import { useData } from '../useData';
 
 export default function Home() {
-  const { data, error } = useData(api.listings);
+  const { data, loading, error, reload } = useData(api.listings);
   const { config } = usePersona();
   const fee = config ? `${Number(config.feeRate) * 100}%` : '3%';
   return (
@@ -29,23 +29,29 @@ export default function Home() {
         </div>
       </section>
 
-      <ErrorBox msg={error} />
-      <section className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-        {data?.map((l) => (
-          <Link key={l.id} to={`/stay/${l.slug}`} className="group block rounded-sm border-2 border-tinta bg-papel shadow-solida active:translate-x-[3px] active:translate-y-[3px] active:shadow-solida-xs">
-            <Cover n={l.cover} className="aspect-[4/3] border-0 border-b-2" />
-            <div className="p-3.5">
-              <div className="font-display text-[18px] font-extrabold leading-tight">{l.title}</div>
-              <div className="text-[13px] text-gris">{l.area}</div>
-              <div className="mt-2 text-[14px]">{l.summary}</div>
-              <div className="mt-3 flex items-baseline justify-between">
-                <span className="num font-bold">{mxn(l.nightly_mxn)} <span className="font-normal text-gris">/ night</span></span>
-                <span className="text-[12px] text-gris">{l.max_guests} guests</span>
+      <ErrorBox msg={error} onRetry={reload} />
+      {loading ? (
+        <Loading />
+      ) : !data ? null : data.length > 0 ? (
+        <section className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+          {data.map((l) => (
+            <Link key={l.id} to={`/stay/${l.slug}`} className="group block rounded-sm border-2 border-tinta bg-papel shadow-solida active:translate-x-[3px] active:translate-y-[3px] active:shadow-solida-xs">
+              <Cover n={l.cover} className="aspect-[4/3] border-0 border-b-2" />
+              <div className="p-3.5">
+                <div className="font-display text-[18px] font-extrabold leading-tight">{l.title}</div>
+                <div className="text-[13px] text-gris">{l.area}</div>
+                <div className="mt-2 text-[14px]">{l.summary}</div>
+                <div className="mt-3 flex items-baseline justify-between">
+                  <span className="num font-bold">{mxn(l.nightly_mxn)} <span className="font-normal text-gris">/ night</span></span>
+                  <span className="text-[12px] text-gris">{l.max_guests} guests</span>
+                </div>
               </div>
-            </div>
-          </Link>
-        ))}
-      </section>
+            </Link>
+          ))}
+        </section>
+      ) : (
+        <EmptyState message="No listings available." />
+      )}
     </div>
   );
 }

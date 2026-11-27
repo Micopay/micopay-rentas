@@ -55,5 +55,29 @@ export function Row({ k, v, strong = false }: { k: ReactNode; v: ReactNode; stro
   );
 }
 
-export const ErrorBox = ({ msg }: { msg: string | null }) =>
-  msg ? <div className="rounded-sm border-2 border-rojo bg-rojo-suave px-3 py-2 text-[14px] font-semibold text-rojo">{msg}</div> : null;
+export const Loading = () => <p className="text-gris text-[15px]">Loading…</p>;
+
+export const EmptyState = ({ message }: { message: string }) => (
+  <div className="rounded-sm border-2 border-tinta bg-papel px-4 py-6 text-center text-gris">{message}</div>
+);
+
+export const MissingPersona = ({ type }: { type: 'guest' | 'host' | 'arbiter' }) => {
+  const messages = {
+    guest: 'Switch to a guest account (top right) to view your trips.',
+    host: 'Switch to a host account (top right) to view your hosting dashboard.',
+    arbiter: 'Switch to the MicoPay arbiter (top right) to view disputes.',
+  };
+  return <div className="rounded-sm border-2 border-tinta bg-papel px-4 py-6 text-center text-gris">{messages[type]}</div>;
+};
+
+export const ErrorBox = ({ msg, onRetry }: { msg: string | null; onRetry?: () => void }) =>
+  msg ? (
+    <div className="rounded-sm border-2 border-rojo bg-rojo-suave px-3 py-2 text-[14px] font-semibold text-rojo">
+      {msg}
+      {onRetry && (
+        <button onClick={onRetry} className="ml-3 min-h-12 min-w-12 px-2 underline hover:no-underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rojo">
+          Retry
+        </button>
+      )}
+    </div>
+  ) : null;

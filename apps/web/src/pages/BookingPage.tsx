@@ -2,7 +2,7 @@ import Big from 'big.js';
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api, type BookingDetail } from '../api';
-import { Cover, ErrorBox, Panel, Row, StatusBadge, usePersona } from '../comun';
+import { Cover, ErrorBox, Loading, Panel, Row, StatusBadge, usePersona } from '../comun';
 import { day, duration, mxn, short, usdc, when } from '../format';
 import { Button, Icon, Label } from '../ui';
 
@@ -17,15 +17,17 @@ export default function BookingPage({ onChange }: { onChange: () => void }) {
   const [b, setB] = useState<BookingDetail | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [initialLoad, setInitialLoad] = useState(true);
   const [skew, setSkew] = useState(0); // ledger clock − local clock
   const [now, setNow] = useState(Date.now() / 1000);
   const [split, setSplit] = useState<{ guest: string; host: string; platform: string } | null>(null);
 
-  const load = () => api.booking(Number(id)).then((d) => { setB(d); setSkew(d.ledgerTime - Date.now() / 1000); }).catch((e: Error) => setErr(e.message));
+  const load = () => api.booking(Number(id)).then((d) => { setB(d); setSkew(d.ledgerTime - Date.now() / 1000); setInitialLoad(false); }).catch((e: Error) => { setErr(e.message); setInitialLoad(false); });
   useEffect(() => { load(); const t = setInterval(load, 10_000); return () => clearInterval(t); }, [id]);
   useEffect(() => { const t = setInterval(() => setNow(Date.now() / 1000), 1000); return () => clearInterval(t); }, []);
 
-  if (!b) return <ErrorBox msg={err} />;
+  if (initialLoad && !b) return <Loading />;
+  if (!b) return <ErrorBox msg={err ?? 'Booking not found'} onRetry={load} />;
   const ledger = now + skew;
   const checkIn = Number(b.chain_check_in), deadline = Number(b.chain_deadline);
   const phase = ledger < checkIn ? 'before' : ledger < deadline ? 'stay' : 'after';
@@ -118,7 +120,7 @@ export default function BookingPage({ onChange }: { onChange: () => void }) {
       </div>
 
       <div className="min-w-0 space-y-4 lg:sticky lg:top-4 lg:self-start">
-        <ErrorBox msg={err} />
+        <ErrorBox msg={err} onRetry={load} />
         {b.status === 'cancelled' && <Panel title="Cancelled"><p>The booking was cancelled and the guest's refund was processed. Every movement is in the history with its Stellar transaction.</p></Panel>}
         {b.status === 'released' && <Panel title="Paid out"><p>The host received the stay payment and the guest's deposit has been returned.</p></Panel>}
         {b.status === 'resolved' && <Panel title="Resolved"><p>The arbiter's decision has been paid out. Every movement is in the history with its Stellar transaction.</p></Panel>}
@@ -136,7 +138,7 @@ export default function BookingPage({ onChange }: { onChange: () => void }) {
               : ledger < stayPaidAt
                 ? <>Something wrong with the place? Report it before {when(new Date(stayPaidAt * 1000).toISOString())}; after that the host is paid for the stay.</>
                 : 'The stay hold has ended. The host can be paid now; the damage deposit will remain in escrow through the claims window.'}</p>
-            {stayPaid && phase !== 'after' && <Button block className="mt-3" disabled={!!busy} onClick={() => run('release', { by: 'guest' })}>{busy === 'release' ? 'Releasing…' : 'Release the deposit'}</Button>}
+            {phase !== 'after' && <Button block className="mt-3" disabled={!!busy} onClick={() => run('release', { by: 'guest' })}>{busy === 'release' ? 'Releasing…' : stayPaid ? 'Release the deposit' : 'Release payment to host'}</Button>}
             {phase === 'stay' && <Button variant="ghost" block className="mt-3" disabled={!!busy} onClick={() => run('dispute')}>{busy === 'dispute' ? 'Opening…' : 'Report a problem'}</Button>}
           </Panel>
         )}
@@ -177,14 +179,16 @@ export default function BookingPage({ onChange }: { onChange: () => void }) {
             </Button>
           </Panel>
         )}
-        {who === 'arbiter' && stayPaid && open && phase !== 'before' && phase !== 'after' && (
+        {who === 'arbiter' && open && phase !== 'before' && phase !== 'after' && (
           <Panel title="Arbiter">
-            <Button variant="ghost" block disabled={!!busy} onClick={() => run('release', { by: 'arbiter' })}>{busy === 'release' ? 'Releasing…' : 'Release the deposit'}</Button>
+            <Button variant="ghost" block disabled={!!busy} onClick={() => run('release', { by: 'arbiter' })}>{busy === 'release' ? 'Releasing…' : stayPaid ? 'Release the deposit' : 'Release to host'}</Button>
           </Panel>
         )}
         {(open || b.status === 'disputed') && phase === 'after' && (
           <Panel title="Claims closed">
-            <p className="text-[15px]">Claims have closed. Anyone can settle the booking; the host gets the stay and the guest gets the deposit.</p>
+            <p className="text-[15px]">{stayPaid
+              ? 'Claims have closed. Anyone can settle the booking; the stay was already paid, so the guest gets the deposit back.'
+              : 'Claims have closed. Anyone can settle the booking; the host gets the stay and the guest gets the deposit.'}</p>
             <Button block className="mt-3" disabled={!!busy} onClick={() => run('settle-default')}>{busy === 'settle-default' ? 'Paying out…' : 'Settle by default'}</Button>
           </Panel>
         )}
