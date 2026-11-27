@@ -4,6 +4,7 @@ use soroban_sdk::{contracttype, Address, Vec};
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Status {
     Locked,
+    StayPaid,
     Disputed,
     Released,
     Cancelled,
@@ -27,7 +28,9 @@ pub struct Booking {
     pub fee: i128,
     pub deposit: i128,
     pub check_in: u64,
+    pub stay_hold_secs: u64,
     pub deadline: u64,
+    pub stay_paid: bool,
     pub policy: Vec<Tier>,
     pub status: Status,
 }

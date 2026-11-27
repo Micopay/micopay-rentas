@@ -46,8 +46,12 @@ fn bid(env: &Env, n: u8) -> BytesN<32> {
 
 /// Price 10 000, fee 500, deposit 2 000; check-in in 10 days, deadline 3 days after a 2-night stay.
 fn book(c: &Ctx, n: u8) -> BytesN<32> {
+    book_with_hold(c, n, 3 * DAY)
+}
+
+fn book_with_hold(c: &Ctx, n: u8, stay_hold_secs: u64) -> BytesN<32> {
     let id = bid(&c.env, n);
-    c.escrow.lock(&id, &c.guest, &c.host, &10_000, &500, &2_000, &(T0 + 10 * DAY), &(T0 + 15 * DAY), &moderate(&c.env));
+    c.escrow.lock(&id, &c.guest, &c.host, &10_000, &500, &2_000, &(T0 + 10 * DAY), &stay_hold_secs, &(T0 + 15 * DAY), &moderate(&c.env));
     id
 }
 
@@ -71,7 +75,7 @@ fn lock_takes_everything_into_escrow() {
 fn booking_id_cannot_be_reused() {
     let c = setup();
     book(&c, 1);
-    let r = c.escrow.try_lock(&bid(&c.env, 1), &c.guest, &c.host, &1, &0, &0, &(T0 + DAY), &(T0 + 2 * DAY), &moderate(&c.env));
+    let r = c.escrow.try_lock(&bid(&c.env, 1), &c.guest, &c.host, &1, &0, &0, &(T0 + DAY), &0, &(T0 + 2 * DAY), &moderate(&c.env));
     assert_eq!(r, Err(Ok(EscrowError::BookingExists)));
 }
 
@@ -80,15 +84,16 @@ fn lock_rejects_bad_input() {
     let c = setup();
     let p = moderate(&c.env);
     let e = &c.env;
-    assert_eq!(c.escrow.try_lock(&bid(e, 2), &c.guest, &c.host, &0, &0, &0, &(T0 + DAY), &(T0 + 2 * DAY), &p), Err(Ok(EscrowError::InvalidAmount)));
-    assert_eq!(c.escrow.try_lock(&bid(e, 2), &c.guest, &c.guest, &1, &0, &0, &(T0 + DAY), &(T0 + 2 * DAY), &p), Err(Ok(EscrowError::InvalidParties)));
-    assert_eq!(c.escrow.try_lock(&bid(e, 2), &c.guest, &c.host, &1, &0, &0, &T0, &(T0 + 2 * DAY), &p), Err(Ok(EscrowError::InvalidDates)));
-    assert_eq!(c.escrow.try_lock(&bid(e, 2), &c.guest, &c.host, &1, &0, &0, &(T0 + DAY), &(T0 + DAY), &p), Err(Ok(EscrowError::InvalidDates)));
+    assert_eq!(c.escrow.try_lock(&bid(e, 2), &c.guest, &c.host, &0, &0, &0, &(T0 + DAY), &0, &(T0 + 2 * DAY), &p), Err(Ok(EscrowError::InvalidAmount)));
+    assert_eq!(c.escrow.try_lock(&bid(e, 2), &c.guest, &c.guest, &1, &0, &0, &(T0 + DAY), &0, &(T0 + 2 * DAY), &p), Err(Ok(EscrowError::InvalidParties)));
+    assert_eq!(c.escrow.try_lock(&bid(e, 2), &c.guest, &c.host, &1, &0, &0, &T0, &0, &(T0 + 2 * DAY), &p), Err(Ok(EscrowError::InvalidDates)));
+    assert_eq!(c.escrow.try_lock(&bid(e, 2), &c.guest, &c.host, &1, &0, &0, &(T0 + DAY), &0, &(T0 + DAY), &p), Err(Ok(EscrowError::InvalidDates)));
+    assert_eq!(c.escrow.try_lock(&bid(e, 2), &c.guest, &c.host, &1, &0, &0, &(T0 + DAY), &(DAY + 1), &(T0 + 2 * DAY), &p), Err(Ok(EscrowError::InvalidDates)));
     // A later cancellation refunding more than an earlier one is not a valid policy.
     let bad = vec![e, Tier { min_secs_before: 5 * DAY, refund_bps: 5_000 }, Tier { min_secs_before: DAY, refund_bps: 10_000 }];
-    assert_eq!(c.escrow.try_lock(&bid(e, 2), &c.guest, &c.host, &1, &0, &0, &(T0 + DAY), &(T0 + 2 * DAY), &bad), Err(Ok(EscrowError::InvalidPolicy)));
+    assert_eq!(c.escrow.try_lock(&bid(e, 2), &c.guest, &c.host, &1, &0, &0, &(T0 + DAY), &0, &(T0 + 2 * DAY), &bad), Err(Ok(EscrowError::InvalidPolicy)));
     let over = vec![e, Tier { min_secs_before: DAY, refund_bps: 10_001 }];
-    assert_eq!(c.escrow.try_lock(&bid(e, 2), &c.guest, &c.host, &1, &0, &0, &(T0 + DAY), &(T0 + 2 * DAY), &over), Err(Ok(EscrowError::InvalidPolicy)));
+    assert_eq!(c.escrow.try_lock(&bid(e, 2), &c.guest, &c.host, &1, &0, &0, &(T0 + DAY), &0, &(T0 + 2 * DAY), &over), Err(Ok(EscrowError::InvalidPolicy)));
 }
 
 #[test]
@@ -158,6 +163,108 @@ fn release_needs_check_in_and_the_right_signer() {
 }
 
 #[test]
+fn pay_stay_waits_for_hold_and_leaves_the_deposit() {
+    let c = setup();
+    let id = book_with_hold(&c, 1, 2 * DAY);
+    at(&c, T0 + 12 * DAY - 1);
+    assert_eq!(c.escrow.try_pay_stay(&id), Err(Ok(EscrowError::TooEarly)));
+    assert_eq!(balances(&c), (1_000_000 - 12_500, 0, 0, 12_500));
+    at(&c, T0 + 12 * DAY);
+    c.escrow.pay_stay(&id);
+    assert_eq!(balances(&c), (1_000_000 - 12_500, 10_000, 500, 2_000));
+    assert_eq!(c.escrow.get_booking(&id).status, Status::StayPaid);
+}
+
+#[test]
+fn zero_hold_allows_payment_at_check_in() {
+    let c = setup();
+    let id = book_with_hold(&c, 1, 0);
+    at(&c, T0 + 10 * DAY);
+    c.escrow.pay_stay(&id);
+    assert_eq!(balances(&c), (1_000_000 - 12_500, 10_000, 500, 2_000));
+}
+
+#[test]
+fn dispute_during_hold_blocks_stay_payment_and_resolves_full_escrow() {
+    let c = setup();
+    let id = book_with_hold(&c, 1, 2 * DAY);
+    at(&c, T0 + 11 * DAY);
+    c.escrow.dispute(&id);
+    assert_eq!(c.escrow.try_pay_stay(&id), Err(Ok(EscrowError::NotLocked)));
+    c.escrow.resolve(&id, &500, &11_500, &500);
+    assert_eq!(balances(&c), (1_000_000 - 12_000, 11_500, 500, 0));
+}
+
+#[test]
+fn stay_paid_rejects_guest_dispute_but_allows_damage_claim_until_deadline() {
+    let c = setup();
+    let id = book_with_hold(&c, 1, DAY);
+    at(&c, T0 + 11 * DAY);
+    c.escrow.pay_stay(&id);
+    assert_eq!(c.escrow.try_dispute(&id), Err(Ok(EscrowError::NotLocked)));
+    c.escrow.claim_damage(&id);
+    assert_eq!(c.escrow.try_resolve(&id, &1_000, &1_500, &0), Err(Ok(EscrowError::InvalidSplit)));
+    assert_eq!(c.escrow.try_resolve(&id, &0, &2_000, &1), Err(Ok(EscrowError::InvalidSplit)));
+    c.escrow.resolve(&id, &500, &1_500, &0);
+    assert_eq!(balances(&c), (1_000_000 - 12_000, 11_500, 500, 0));
+}
+
+#[test]
+fn damage_claim_is_too_late_at_deadline_after_stay_payment() {
+    let c = setup();
+    let id = book_with_hold(&c, 1, DAY);
+    at(&c, T0 + 11 * DAY);
+    c.escrow.pay_stay(&id);
+    at(&c, T0 + 15 * DAY);
+    assert_eq!(c.escrow.try_claim_damage(&id), Err(Ok(EscrowError::TooLate)));
+}
+
+#[test]
+fn release_after_stay_paid_returns_only_the_deposit() {
+    let c = setup();
+    let id = book_with_hold(&c, 1, DAY);
+    at(&c, T0 + 11 * DAY);
+    c.escrow.pay_stay(&id);
+    c.escrow.release(&id, &c.guest);
+    assert_eq!(balances(&c), (1_000_000 - 10_500, 10_000, 500, 0));
+}
+
+#[test]
+fn default_after_stay_paid_returns_only_the_deposit() {
+    let c = setup();
+    let id = book_with_hold(&c, 1, DAY);
+    at(&c, T0 + 11 * DAY);
+    c.escrow.pay_stay(&id);
+    at(&c, T0 + 15 * DAY);
+    c.escrow.settle_default(&id);
+    assert_eq!(balances(&c), (1_000_000 - 10_500, 10_000, 500, 0));
+}
+
+#[test]
+fn disputed_stay_paid_default_waits_for_arbiter_window_and_returns_deposit() {
+    let c = setup();
+    let id = book_with_hold(&c, 1, DAY);
+    at(&c, T0 + 11 * DAY);
+    c.escrow.pay_stay(&id);
+    c.escrow.claim_damage(&id);
+    at(&c, T0 + 22 * DAY - 1);
+    assert_eq!(c.escrow.try_settle_default(&id), Err(Ok(EscrowError::TooEarly)));
+    at(&c, T0 + 22 * DAY);
+    c.escrow.settle_default(&id);
+    assert_eq!(balances(&c), (1_000_000 - 10_500, 10_000, 500, 0));
+}
+
+#[test]
+fn cancel_and_host_cancel_are_not_allowed_after_stay_payment() {
+    let c = setup();
+    let id = book_with_hold(&c, 1, DAY);
+    at(&c, T0 + 11 * DAY);
+    c.escrow.pay_stay(&id);
+    assert_eq!(c.escrow.try_cancel(&id), Err(Ok(EscrowError::NotLocked)));
+    assert_eq!(c.escrow.try_host_cancel(&id), Err(Ok(EscrowError::NotLocked)));
+}
+
+#[test]
 fn default_after_deadline_pays_host() {
     let c = setup();
     let id = book(&c, 1);
@@ -211,7 +318,7 @@ fn every_path_empties_the_escrow() {
     for (n, path) in [(1u8, 0u8), (2, 1), (3, 2), (4, 3), (5, 4)] {
         at(&c, T0);
         let id = bid(&c.env, n);
-        c.escrow.lock(&id, &c.guest, &c.host, &7_777, &333, &1_111, &(T0 + 10 * DAY), &(T0 + 15 * DAY), &moderate(&c.env));
+        c.escrow.lock(&id, &c.guest, &c.host, &7_777, &333, &1_111, &(T0 + 10 * DAY), &(3 * DAY), &(T0 + 15 * DAY), &moderate(&c.env));
         match path {
             0 => { at(&c, T0 + 8 * DAY); c.escrow.cancel(&id); }
             1 => { c.escrow.host_cancel(&id); }
