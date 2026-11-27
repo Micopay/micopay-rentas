@@ -24,5 +24,7 @@ jobs:
         run: npm ci
       - name: Typecheck all workspaces
         run: npm run typecheck
+      - name: Test web app
+        run: npm test -w apps/web
       - name: Build web app
         run: npm run build -w apps/web

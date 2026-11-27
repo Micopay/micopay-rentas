@@ -3,6 +3,7 @@ import { Link, NavLink, Route, Routes } from 'react-router-dom';
 import { api, type Config, type User } from './api';
 import { ErrorBox, PersonaCtx, type Persona } from './comun';
 import { usdc } from './format';
+import { lang, setLang, t } from './i18n';
 import Home from './pages/Home';
 import ListingPage from './pages/ListingPage';
 import Trips from './pages/Trips';
@@ -55,31 +56,37 @@ export default function App() {
               MICO<span className="text-naranja">PAY</span> <span className="text-[14px] font-bold tracking-[.12em]">RENTAS</span>
             </Link>
             <nav className="flex flex-wrap gap-1">
-              <NavLink to="/" end className={nav}>Stays</NavLink>
-              {persona?.kind === 'guest' && <NavLink to="/trips" className={nav}>My trips</NavLink>}
-              {persona?.kind === 'host' && <NavLink to="/hosting" className={nav}>Hosting</NavLink>}
-              {persona?.kind === 'arbiter' && <NavLink to="/disputes" className={nav}>Disputes</NavLink>}
+              <NavLink to="/" end className={nav}>{t('Estancias')}</NavLink>
+              {persona?.kind === 'guest' && <NavLink to="/trips" className={nav}>{t('Mis viajes')}</NavLink>}
+              {persona?.kind === 'host' && <NavLink to="/hosting" className={nav}>{t('Anfitrión')}</NavLink>}
+              {persona?.kind === 'arbiter' && <NavLink to="/disputes" className={nav}>{t('Disputas')}</NavLink>}
             </nav>
             <div className="ml-auto flex items-center gap-3">
               {usersError ? (
-                <button onClick={reloadUsers} className="min-h-12 px-2 text-[13px] font-bold text-rojo underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-rojo">Failed to load users · Retry</button>
+                <button onClick={reloadUsers} className="min-h-12 px-2 text-[13px] font-bold text-rojo underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-rojo">{t('No se pudieron cargar los usuarios · Reintentar')}</button>
               ) : persona && persona.kind !== 'arbiter' ? (
                 <span className="num text-[13px] text-gris">{persona.user.balance ? usdc(persona.user.balance) : '—'}</span>
               ) : null}
               <label className="flex min-w-0 items-center gap-2 text-[13px] font-bold">
-                <span className="hidden sm:inline">Acting as</span>
+                <span className="hidden sm:inline">{t('Actuando como')}</span>
                 <select value={who} onChange={(e) => pick(e.target.value)} className="min-h-10 max-w-[200px] rounded-sm border-2 border-tinta bg-fondo px-2 text-[14px]">
-                  {users.filter((u) => u.role === 'guest').map((u) => <option key={u.id} value="guest">{u.name} · guest</option>)}
-                  {users.filter((u) => u.role === 'host').map((u) => <option key={u.id} value={`host:${u.id}`}>{u.name} · host</option>)}
-                  <option value="arbiter">MicoPay · arbiter</option>
+                  {users.filter((u) => u.role === 'guest').map((u) => <option key={u.id} value="guest">{u.name} · {t('huésped')}</option>)}
+                  {users.filter((u) => u.role === 'host').map((u) => <option key={u.id} value={`host:${u.id}`}>{u.name} · {t('anfitrión')}</option>)}
+                  <option value="arbiter">MicoPay · {t('árbitro')}</option>
                 </select>
               </label>
+              <div className="flex" role="group" aria-label={t('Idioma')}>
+                {(['es', 'en'] as const).map((l) => (
+                  <button key={l} type="button" onClick={() => setLang(l)} aria-pressed={lang === l}
+                    className={`min-h-12 min-w-12 border-2 border-tinta px-2 text-[13px] font-bold uppercase focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tinta ${lang === l ? 'bg-tinta text-papel' : 'bg-papel text-tinta'}`}>{l}</button>
+                ))}
+              </div>
             </div>
           </div>
-          {configError && <div className="border-t-2 border-tinta bg-rojo-suave px-4 py-1.5 text-center text-[12px] font-bold text-rojo">Failed to load config. <button onClick={reloadConfig} className="min-h-12 min-w-12 px-2 underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-rojo">Retry</button></div>}
+          {configError && <div className="border-t-2 border-tinta bg-rojo-suave px-4 py-1.5 text-center text-[12px] font-bold text-rojo">{t('No se pudo cargar la configuración.')} <button onClick={reloadConfig} className="min-h-12 min-w-12 px-2 underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-rojo">{t('Reintentar')}</button></div>}
           {config && config.daySecs < 86_400 && (
             <div className="border-t-2 border-tinta bg-aviso px-4 py-1.5 text-center text-[12px] font-bold text-aviso-texto">
-              Testnet demo · demo clock: 1 calendar day = {config.daySecs} s on-chain, so check-in and payouts happen within minutes
+              {t('Demo en testnet · reloj de demo: 1 día calendario = {secs} s en la cadena, así que el check-in y los pagos ocurren en minutos', { secs: config.daySecs })}
             </div>
           )}
         </header>
@@ -94,8 +101,8 @@ export default function App() {
           </Routes>
         </main>
         <footer className="mx-auto max-w-6xl px-4 pb-8 text-[12px] text-gris">
-          Payments are held by the escrow-v2 contract on Stellar testnet{config && <> · <a className="underline" href={config.contractExplorer} target="_blank" rel="noreferrer">{config.contractId.slice(0, 8)}…</a></>}.
-          Listings are fictional demo homes.
+          {t('Los pagos los retiene el contrato escrow-v2 en Stellar testnet')}{config && <> · <a className="underline" href={config.contractExplorer} target="_blank" rel="noreferrer">{config.contractId.slice(0, 8)}…</a></>}.
+          {' '}{t('Los alojamientos son casas de demostración ficticias.')}
         </footer>
       </div>
     </PersonaCtx.Provider>

@@ -1,5 +1,6 @@
-import { createContext, useContext, type ReactNode } from 'react';
+import { createContext, Fragment, useContext, type ReactNode } from 'react';
 import type { Config, Status, User } from './api';
+import { t } from './i18n';
 import { Badge } from './ui';
 
 /** Who the demo is acting as. In production this is the MicoPay login (Stellar address). */
@@ -28,14 +29,14 @@ export function Cover({ n, title, className = '' }: { n: number; title?: string;
 }
 
 const STATUS: Record<Status, { label: string; tono: 'tinta' | 'naranja' | 'verde' | 'papel' | 'aviso' }> = {
-  locked: { label: 'In escrow', tono: 'tinta' },
-  stay_paid: { label: 'Stay paid', tono: 'verde' },
-  disputed: { label: 'Disputed', tono: 'aviso' },
-  released: { label: 'Paid out', tono: 'verde' },
-  resolved: { label: 'Resolved', tono: 'verde' },
-  cancelled: { label: 'Cancelled', tono: 'papel' },
+  locked: { label: 'En garantía', tono: 'tinta' },
+  stay_paid: { label: 'Estancia pagada', tono: 'verde' },
+  disputed: { label: 'En disputa', tono: 'aviso' },
+  released: { label: 'Pagado', tono: 'verde' },
+  resolved: { label: 'Resuelto', tono: 'verde' },
+  cancelled: { label: 'Cancelado', tono: 'papel' },
 };
-export const StatusBadge = ({ s }: { s: Status }) => <Badge tono={STATUS[s].tono}>{STATUS[s].label}</Badge>;
+export const StatusBadge = ({ s }: { s: Status }) => <Badge tono={STATUS[s].tono}>{t(STATUS[s].label)}</Badge>;
 
 export function Panel({ title, children, className = '' }: { title?: ReactNode; children: ReactNode; className?: string }) {
   return (
@@ -55,7 +56,7 @@ export function Row({ k, v, strong = false }: { k: ReactNode; v: ReactNode; stro
   );
 }
 
-export const Loading = () => <p className="text-gris text-[15px]">Loading…</p>;
+export const Loading = () => <p className="text-gris text-[15px]">{t('Cargando…')}</p>;
 
 export const EmptyState = ({ message }: { message: string }) => (
   <div className="rounded-sm border-2 border-tinta bg-papel px-4 py-6 text-center text-gris">{message}</div>
@@ -63,9 +64,9 @@ export const EmptyState = ({ message }: { message: string }) => (
 
 export const MissingPersona = ({ type }: { type: 'guest' | 'host' | 'arbiter' }) => {
   const messages = {
-    guest: 'Switch to a guest account (top right) to view your trips.',
-    host: 'Switch to a host account (top right) to view your hosting dashboard.',
-    arbiter: 'Switch to the MicoPay arbiter (top right) to view disputes.',
+    guest: t('Cámbiate a una cuenta de huésped (arriba a la derecha) para ver tus viajes.'),
+    host: t('Cámbiate a una cuenta de anfitrión (arriba a la derecha) para ver tu panel.'),
+    arbiter: t('Cámbiate al árbitro de MicoPay (arriba a la derecha) para ver las disputas.'),
   };
   return <div className="rounded-sm border-2 border-tinta bg-papel px-4 py-6 text-center text-gris">{messages[type]}</div>;
 };
@@ -76,8 +77,13 @@ export const ErrorBox = ({ msg, onRetry }: { msg: string | null; onRetry?: () =>
       {msg}
       {onRetry && (
         <button onClick={onRetry} className="ml-3 min-h-12 min-w-12 px-2 underline hover:no-underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rojo">
-          Retry
+          {t('Reintentar')}
         </button>
       )}
     </div>
   ) : null;
+
+/** A translated string whose only markup is <b>…</b>, rendered without innerHTML. */
+export function Rich({ text }: { text: string }) {
+  return <>{text.split(/<b>(.*?)<\/b>/).map((part, i) => (i % 2 ? <b key={i} className="num">{part}</b> : <Fragment key={i}>{part}</Fragment>))}</>;
+}

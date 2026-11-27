@@ -2,14 +2,17 @@ import Big from 'big.js';
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api, type BookingDetail } from '../api';
-import { Cover, ErrorBox, Loading, Panel, Row, StatusBadge, usePersona } from '../comun';
+import { Cover, ErrorBox, Loading, Panel, Rich, Row, StatusBadge, usePersona } from '../comun';
 import { day, duration, mxn, short, usdc, when } from '../format';
+import { t } from '../i18n';
 import { Button, Icon, Label } from '../ui';
 
 const EVENT: Record<string, string> = {
-  locked: 'Paid into escrow', pay_stay: 'Stay paid to the host', cancel: 'Cancelled by the guest', host_cancel: 'Cancelled by the host', release: 'Released to the host',
-  dispute: 'Guest reported a problem', claim_damage: 'Host claimed damage', resolve: 'Arbiter split the escrow', settle_default: 'Paid out by default after the deadline',
+  locked: 'Pagado a la garantía', pay_stay: 'Estancia pagada al anfitrión', cancel: 'Cancelada por el huésped', host_cancel: 'Cancelada por el anfitrión', release: 'Liberado al anfitrión',
+  dispute: 'El huésped reportó un problema', claim_damage: 'El anfitrión reclamó daños', resolve: 'El árbitro repartió la garantía', settle_default: 'Pagado por defecto después del plazo',
 };
+
+const SPLIT_LABEL = { guest: 'Para el huésped (MXN)', host: 'Para el anfitrión (MXN)', platform: 'Para la plataforma (MXN)' } as const;
 
 export default function BookingPage({ onChange }: { onChange: () => void }) {
   const { id = '' } = useParams();
@@ -27,7 +30,7 @@ export default function BookingPage({ onChange }: { onChange: () => void }) {
   useEffect(() => { const t = setInterval(() => setNow(Date.now() / 1000), 1000); return () => clearInterval(t); }, []);
 
   if (initialLoad && !b) return <Loading />;
-  if (!b) return <ErrorBox msg={err ?? 'Booking not found'} onRetry={load} />;
+  if (!b) return <ErrorBox msg={err ?? t('Reserva no encontrada')} onRetry={load} />;
   const ledger = now + skew;
   const checkIn = Number(b.chain_check_in), deadline = Number(b.chain_deadline);
   const phase = ledger < checkIn ? 'before' : ledger < deadline ? 'stay' : 'after';
@@ -69,49 +72,49 @@ export default function BookingPage({ onChange }: { onChange: () => void }) {
           <div>
             <Label>{b.reference}</Label>
             <h1 className="mt-2 font-display text-[28px] font-extrabold leading-tight"><Link to={`/stay/${b.slug}`}>{b.title}</Link></h1>
-            <div className="text-gris">{day(b.check_in)} → {day(b.check_out)} · {b.nights} night{b.nights > 1 ? 's' : ''} · {b.guests} guests</div>
-            <div className="text-[14px] text-gris">Guest {b.guest_name} · Host {b.host_name}</div>
+            <div className="text-gris">{day(b.check_in)} → {day(b.check_out)} · {b.nights === 1 ? t('1 noche') : t('{n} noches', { n: b.nights })}</div>
+            <div className="text-[14px] text-gris">{t('{n} huéspedes · Huésped {guest} · Anfitrión {host}', { n: b.guests, guest: b.guest_name, host: b.host_name })}</div>
           </div>
         </div>
 
-        <Panel title={<span className="flex items-center justify-between">Escrow on Stellar <StatusBadge s={b.status} /></span>}>
+        <Panel title={<span className="flex items-center justify-between">{t('Garantía en Stellar')} <StatusBadge s={b.status} /></span>}>
           <ol className="grid gap-2 text-[13px] sm:grid-cols-3">
             {[
-              { t: cancelled ? 'Booking cancelled' : 'Check-in', at: checkIn, done: ledger >= checkIn || cancelled },
-              { t: 'Stay paid to host', at: stayPaidAt, done: stayPaid },
-              { t: 'Claims close', at: deadline, done: claimsClosed },
+              { k: 'checkin', t: cancelled ? 'Reserva cancelada' : 'Llegada', at: checkIn, done: ledger >= checkIn || cancelled },
+              { k: 'stay', t: 'Pago de la estancia', at: stayPaidAt, done: stayPaid },
+              { k: 'claims', t: 'Cierre de reclamos', at: deadline, done: claimsClosed },
             ].map((s) => (
-              <li key={s.t} className={`rounded-sm border-2 border-tinta px-2.5 py-2 ${s.done ? 'bg-tinta text-papel' : 'bg-fondo'}`}>
-                <div className="font-bold">{s.t}</div>
+              <li key={s.k} className={`rounded-sm border-2 border-tinta px-2.5 py-2 ${s.done ? 'bg-tinta text-papel' : 'bg-fondo'}`}>
+                <div className="font-bold">{t(s.t)}</div>
                 <div className={`num ${s.done ? 'text-gris-3' : 'text-gris'}`}>{s.done
-                  ? s.t === 'Stay paid to host' ? when(new Date(s.at * 1000).toISOString()) : 'done'
-                  : `in ${duration(s.at - ledger)}`}</div>
+                  ? s.k === 'stay' ? when(new Date(s.at * 1000).toISOString()) : t('hecho')
+                  : t('en {time}', { time: duration(s.at - ledger) })}</div>
               </li>
             ))}
           </ol>
-          {daySecs < 86_400 && <p className="mt-2 text-[12px] text-gris">Demo clock: the on-chain dates run at {daySecs} s per calendar day.</p>}
+          {daySecs < 86_400 && <p className="mt-2 text-[12px] text-gris">{t('Reloj de demo: las fechas en la cadena corren a {secs} s por día calendario.', { secs: daySecs })}</p>}
 
           <div className="mt-4 text-[15px]">
-            <Row k="Stay (to the host)" v={<>{mxn(b.subtotal_mxn)} <span className="text-gris">· {usdc(b.amount_token)}</span></>} />
-            <Row k="MicoPay fee" v={<>{mxn(b.fee_mxn)} <span className="text-gris">· {usdc(b.fee_token)}</span></>} />
-            <Row k="Damage deposit" v={<>{mxn(b.deposit_mxn)} <span className="text-gris">· {usdc(b.deposit_token)}</span></>} />
-            <Row strong k={stayPaid ? 'Total at booking' : 'Locked'} v={mxn(b.total_mxn)} />
-            <div className="text-right text-[12px] text-gris num">1 USD = {Number(b.fx_rate).toFixed(4)} MXN at booking</div>
+            <Row k={t('Estancia (para el anfitrión)')} v={<>{mxn(b.subtotal_mxn)} <span className="text-gris">· {usdc(b.amount_token)}</span></>} />
+            <Row k={t('Comisión de MicoPay')} v={<>{mxn(b.fee_mxn)} <span className="text-gris">· {usdc(b.fee_token)}</span></>} />
+            <Row k={t('Depósito por daños')} v={<>{mxn(b.deposit_mxn)} <span className="text-gris">· {usdc(b.deposit_token)}</span></>} />
+            <Row strong k={t(stayPaid ? 'Total al reservar' : 'Bloqueado')} v={mxn(b.total_mxn)} />
+            <div className="text-right text-[12px] text-gris num">{t('1 USD = {rate} MXN al reservar', { rate: Number(b.fx_rate).toFixed(4) })}</div>
           </div>
           {b.chain && (
             <div className="mt-3 rounded-sm border-2 border-tinta bg-fondo px-3 py-2 text-[13px]">
-              <div className="flex items-center gap-1.5 font-bold"><Icon name="verified" size={18} /> Read from the contract just now</div>
-              <div className="num">status {b.chain.status} · amount {b.chain.amount} · fee {b.chain.fee} · deposit {b.chain.deposit} USDC</div>
-              <div className="num text-gris">booking id {short(b.escrow_id, 8)} = SHA-256 of the booking terms</div>
+              <div className="flex items-center gap-1.5 font-bold"><Icon name="verified" size={18} /> {t('Leído del contrato hace un momento')}</div>
+              <div className="num">{t('estado {status} · monto {amount} · comisión {fee} · depósito {deposit} USDC', { status: b.chain.status, amount: b.chain.amount, fee: b.chain.fee, deposit: b.chain.deposit })}</div>
+              <div className="num text-gris">{t('id de reserva {id} = SHA-256 de los términos de la reserva', { id: short(b.escrow_id, 8) })}</div>
             </div>
           )}
         </Panel>
 
-        <Panel title="History">
+        <Panel title={t('Historial')}>
           <ul className="space-y-2 text-[14px]">
             {b.events.map((e) => (
               <li key={e.id} className="flex items-baseline justify-between gap-3">
-                <span><b>{EVENT[e.kind] ?? e.kind}</b> <span className="text-gris">· {when(e.created_at)}</span></span>
+                <span><b>{EVENT[e.kind] ? t(EVENT[e.kind]!) : e.kind}</b> <span className="text-gris">· {when(e.created_at)}</span></span>
                 {e.explorer && <a className="flex items-center gap-1 whitespace-nowrap font-bold text-verde underline" href={e.explorer} target="_blank" rel="noreferrer">{short(e.tx_hash!, 4)} <Icon name="open_in_new" size={16} /></a>}
               </li>
             ))}
@@ -121,50 +124,50 @@ export default function BookingPage({ onChange }: { onChange: () => void }) {
 
       <div className="min-w-0 space-y-4 lg:sticky lg:top-4 lg:self-start">
         <ErrorBox msg={err} onRetry={load} />
-        {b.status === 'cancelled' && <Panel title="Cancelled"><p>The booking was cancelled and the guest's refund was processed. Every movement is in the history with its Stellar transaction.</p></Panel>}
-        {b.status === 'released' && <Panel title="Paid out"><p>The host received the stay payment and the guest's deposit has been returned.</p></Panel>}
-        {b.status === 'resolved' && <Panel title="Resolved"><p>The arbiter's decision has been paid out. Every movement is in the history with its Stellar transaction.</p></Panel>}
+        {b.status === 'cancelled' && <Panel title={t('Cancelada')}><p>{t('La reserva se canceló y se procesó el reembolso del huésped. Cada movimiento está en el historial con su transacción de Stellar.')}</p></Panel>}
+        {b.status === 'released' && <Panel title={t('Pagado')}><p>{t('El anfitrión recibió el pago de la estancia y se devolvió el depósito del huésped.')}</p></Panel>}
+        {b.status === 'resolved' && <Panel title={t('Resuelto')}><p>{t('La decisión del árbitro ya se pagó. Cada movimiento está en el historial con su transacción de Stellar.')}</p></Panel>}
 
         {who === 'guest' && mine && open && phase === 'before' && (
-          <Panel title="Cancel">
-            <p className="text-[15px]">Cancelling now returns <b className="num">{mxn(refundMxn.toFixed(2))}</b>: {refundPct}% of the stay and fee, plus the full deposit.</p>
-            <Button variant="ghost" block className="mt-3" disabled={!!busy} onClick={() => run('cancel')}>{busy === 'cancel' ? 'Cancelling…' : 'Cancel booking'}</Button>
+          <Panel title={t('Cancelar')}>
+            <p className="text-[15px]"><Rich text={t('Si cancelas ahora te devolvemos <b>{amount}</b>: {pct}% de la estancia y la comisión, más todo el depósito.', { amount: mxn(refundMxn.toFixed(2)), pct: refundPct })} /></p>
+            <Button variant="ghost" block className="mt-3" disabled={!!busy} onClick={() => run('cancel')}>{busy === 'cancel' ? t('Cancelando…') : t('Cancelar reserva')}</Button>
           </Panel>
         )}
         {who === 'guest' && mine && open && phase !== 'before' && (
-          <Panel title="Your stay">
+          <Panel title={t('Tu estancia')}>
             <p className="text-[15px]">{stayPaid
-              ? 'The deposit is still held and is returned when claims close or when you release it.'
+              ? t('El depósito sigue retenido y vuelve cuando cierran los reclamos o cuando lo liberas.')
               : ledger < stayPaidAt
-                ? <>Something wrong with the place? Report it before {when(new Date(stayPaidAt * 1000).toISOString())}; after that the host is paid for the stay.</>
-                : 'The stay hold has ended. The host can be paid now; the damage deposit will remain in escrow through the claims window.'}</p>
-            {phase !== 'after' && <Button block className="mt-3" disabled={!!busy} onClick={() => run('release', { by: 'guest' })}>{busy === 'release' ? 'Releasing…' : stayPaid ? 'Release the deposit' : 'Release payment to host'}</Button>}
-            {phase === 'stay' && <Button variant="ghost" block className="mt-3" disabled={!!busy} onClick={() => run('dispute')}>{busy === 'dispute' ? 'Opening…' : 'Report a problem'}</Button>}
+                ? t('¿Algo mal con el lugar? Repórtalo antes del {date}; después, al anfitrión se le paga la estancia.', { date: when(new Date(stayPaidAt * 1000).toISOString()) })
+                : t('Terminó la retención de la estancia. Ya se le puede pagar al anfitrión; el depósito por daños sigue en la garantía durante el periodo de reclamos.')}</p>
+            {phase !== 'after' && <Button block className="mt-3" disabled={!!busy} onClick={() => run('release', { by: 'guest' })}>{busy === 'release' ? t('Liberando…') : stayPaid ? t('Liberar el depósito') : t('Liberar el pago al anfitrión')}</Button>}
+            {phase === 'stay' && <Button variant="ghost" block className="mt-3" disabled={!!busy} onClick={() => run('dispute')}>{busy === 'dispute' ? t('Abriendo…') : t('Reportar un problema')}</Button>}
           </Panel>
         )}
         {who === 'host' && mine && open && (
-          <Panel title="Host actions">
+          <Panel title={t('Acciones del anfitrión')}>
             {phase === 'stay' && <>
-              <p className="text-[15px]">Something damaged? Claim it before claims close: the arbiter decides how the deposit is split.</p>
-              <Button variant="ghost" block className="mt-3" disabled={!!busy} onClick={() => run('claim-damage')}>{busy === 'claim-damage' ? 'Claiming…' : 'Claim damage'}</Button>
+              <p className="text-[15px]">{t('¿Algo dañado? Reclámalo antes del cierre de reclamos: el árbitro decide cómo se reparte el depósito.')}</p>
+              <Button variant="ghost" block className="mt-3" disabled={!!busy} onClick={() => run('claim-damage')}>{busy === 'claim-damage' ? t('Reclamando…') : t('Reclamar daños')}</Button>
             </>}
-            {phase === 'before' && <p className="text-[15px]">You are paid {mxn(b.subtotal_mxn)} after the stay hold ends.</p>}
-            {phase === 'before' && <Button variant="peligro" block className="mt-3" disabled={!!busy} onClick={() => run('host-cancel')}>{busy === 'host-cancel' ? 'Cancelling…' : 'Cancel and refund the guest in full'}</Button>}
+            {phase === 'before' && <p className="text-[15px]">{t('Recibes {amount} cuando termina la retención de la estancia.', { amount: mxn(b.subtotal_mxn) })}</p>}
+            {phase === 'before' && <Button variant="peligro" block className="mt-3" disabled={!!busy} onClick={() => run('host-cancel')}>{busy === 'host-cancel' ? t('Cancelando…') : t('Cancelar y reembolsar todo al huésped')}</Button>}
           </Panel>
         )}
         {open && b.status === 'locked' && ledger >= stayPaidAt && (
-          <Panel title="Stay payment">
-            <p className="text-[15px]">The stay hold has ended. The host can now be paid; the deposit remains in escrow through the claims window.</p>
-            <Button block className="mt-3" disabled={!!busy} onClick={() => run('pay-stay')}>{busy === 'pay-stay' ? 'Paying the host…' : 'Pay the host'}</Button>
+          <Panel title={t('Pagar la estancia')}>
+            <p className="text-[15px]">{t('Terminó la retención de la estancia. Ya se le puede pagar al anfitrión; el depósito por daños sigue en la garantía durante el periodo de reclamos.')}</p>
+            <Button block className="mt-3" disabled={!!busy} onClick={() => run('pay-stay')}>{busy === 'pay-stay' ? t('Pagando al anfitrión…') : t('Pagar al anfitrión')}</Button>
           </Panel>
         )}
         {who === 'arbiter' && b.status === 'disputed' && (
-          <Panel title="Resolve dispute">
+          <Panel title={t('Resolver disputa')}>
             <p className="text-[14px] text-gris">{stayPaid
-              ? <>Split the {mxn(b.deposit_mxn)} deposit only. The platform share is fixed at MX$0.00.</>
-              : <>Split the {mxn(b.total_mxn)} in escrow. The platform can keep at most its fee.</>}</p>
+              ? t('Reparte solo el depósito de {amount}. La parte de la plataforma es MX$0.00.', { amount: mxn(b.deposit_mxn) })
+              : t('Reparte los {amount} en garantía. La plataforma puede quedarse como máximo con su comisión.', { amount: mxn(b.total_mxn) })}</p>
             {(['guest', 'host', 'platform'] as const).map((k) => (
-              <label key={k} className="mt-2 block text-[13px] font-bold capitalize text-gris">To {k} (MXN)
+              <label key={k} className="mt-2 block text-[13px] font-bold text-gris">{t(SPLIT_LABEL[k])}
                 <input inputMode="decimal" value={stayPaid && k === 'platform' ? '0.00' : split?.[k] ?? ''} readOnly={stayPaid && k === 'platform'} placeholder="0.00"
                   onChange={(e) => setSplit({ guest: split?.guest ?? '', host: split?.host ?? '', platform: split?.platform ?? '', [k]: e.target.value })}
                   className="mt-1 min-h-12 w-full rounded-sm border-2 border-tinta bg-fondo px-3 text-[16px] text-tinta" />
@@ -172,27 +175,27 @@ export default function BookingPage({ onChange }: { onChange: () => void }) {
             ))}
             <Button variant="ghost" className="mt-2" onClick={() => setSplit(stayPaid
               ? { guest: b.deposit_mxn, host: '0.00', platform: '0.00' }
-              : { guest: b.deposit_mxn, host: b.subtotal_mxn, platform: b.fee_mxn })}>Fill: no damage</Button>
-            {splitSum && <div className={`mt-2 num text-[14px] ${splitSum.eq(stayPaid ? b.deposit_mxn : total) ? 'text-verde' : 'text-rojo'}`}>Sum {mxn(splitSum.toFixed(2))} of {mxn(stayPaid ? b.deposit_mxn : b.total_mxn)}</div>}
+              : { guest: b.deposit_mxn, host: b.subtotal_mxn, platform: b.fee_mxn })}>{t('Llenar: sin daños')}</Button>
+            {splitSum && <div className={`mt-2 num text-[14px] ${splitSum.eq(stayPaid ? b.deposit_mxn : total) ? 'text-verde' : 'text-rojo'}`}>{t('Suma {sum} de {total}', { sum: mxn(splitSum.toFixed(2)), total: mxn(stayPaid ? b.deposit_mxn : b.total_mxn) })}</div>}
             <Button block className="mt-3" disabled={!!busy || !splitSum?.eq(stayPaid ? b.deposit_mxn : total) || (stayPaid ? new Big(split?.platform || 0).gt(0) : new Big(split?.platform || 0).gt(b.fee_mxn))} onClick={() => run('resolve', { split })}>
-              {busy === 'resolve' ? 'Paying out…' : 'Resolve and pay out'}
+              {busy === 'resolve' ? t('Pagando…') : t('Resolver y pagar')}
             </Button>
           </Panel>
         )}
         {who === 'arbiter' && open && phase !== 'before' && phase !== 'after' && (
-          <Panel title="Arbiter">
-            <Button variant="ghost" block disabled={!!busy} onClick={() => run('release', { by: 'arbiter' })}>{busy === 'release' ? 'Releasing…' : stayPaid ? 'Release the deposit' : 'Release to host'}</Button>
+          <Panel title={t('Árbitro')}>
+            <Button variant="ghost" block disabled={!!busy} onClick={() => run('release', { by: 'arbiter' })}>{busy === 'release' ? t('Liberando…') : stayPaid ? t('Liberar el depósito') : t('Liberar al anfitrión')}</Button>
           </Panel>
         )}
         {(open || b.status === 'disputed') && phase === 'after' && (
-          <Panel title="Claims closed">
+          <Panel title={t('Reclamos cerrados')}>
             <p className="text-[15px]">{stayPaid
-              ? 'Claims have closed. Anyone can settle the booking; the stay was already paid, so the guest gets the deposit back.'
-              : 'Claims have closed. Anyone can settle the booking; the host gets the stay and the guest gets the deposit.'}</p>
-            <Button block className="mt-3" disabled={!!busy} onClick={() => run('settle-default')}>{busy === 'settle-default' ? 'Paying out…' : 'Settle by default'}</Button>
+              ? t('Cerraron los reclamos. Cualquiera puede liquidar la reserva; la estancia ya se pagó, así que el huésped recupera el depósito.')
+              : t('Cerraron los reclamos. Cualquiera puede liquidar la reserva; el anfitrión recibe la estancia y el huésped el depósito.')}</p>
+            <Button block className="mt-3" disabled={!!busy} onClick={() => run('settle-default')}>{busy === 'settle-default' ? t('Pagando…') : t('Liquidar por defecto')}</Button>
           </Panel>
         )}
-        {b.status === 'disputed' && who !== 'arbiter' && <Panel title="In dispute"><p>{stayPaid ? 'The host has been paid for the stay. The damage deposit remains in escrow while MicoPay reviews the claim.' : 'The payment is still in escrow while MicoPay reviews the claim.'} If the arbiter doesn't decide within 7 days, the contract pays out by default.</p></Panel>}
+        {b.status === 'disputed' && who !== 'arbiter' && <Panel title={t('En disputa')}><p>{stayPaid ? t('El anfitrión ya recibió el pago de la estancia. El depósito por daños sigue en la garantía mientras MicoPay revisa el reclamo.') : t('El pago sigue en la garantía mientras MicoPay revisa el reclamo.')} {t('Si el árbitro no decide en 7 días, el contrato paga por defecto.')}</p></Panel>}
       </div>
     </div>
   );

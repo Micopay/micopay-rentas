@@ -1,3 +1,5 @@
+import { t } from './i18n';
+
 export interface Config {
   contractId: string; contractExplorer: string; asset: { code: string; issuer: string };
   daySecs: number; feeRate: string; stayHoldDays: number; fx: { rate: string; source: string } | null; arbiter: string; platform: string;
@@ -30,12 +32,31 @@ export interface BookingEvent { id: number; kind: string; actor: string; tx_hash
 export interface BookingDetail extends Booking { chain: ChainBooking | null; ledgerTime: number; events: BookingEvent[] }
 export interface TxResult { txHash: string; explorer: string; status: Status | null }
 
+/** API messages the UI knows how to say in both languages. Anything else gets a generic local message. */
+const KNOWN: Record<string, string> = {
+  'Those dates are already booked': 'Esas fechas ya están reservadas',
+  'Booking not found': 'Reserva no encontrada',
+  'Listing not found': 'Alojamiento no encontrado',
+};
+
+/** `message` is safe to show; `raw` is what the API said, for logic only. */
+export class ApiError extends Error {
+  constructor(readonly raw: string, readonly status: number) {
+    super(t(KNOWN[raw] ?? 'Algo salió mal. Inténtalo de nuevo.'));
+  }
+}
+
 async function call<T>(path: string, body?: unknown): Promise<T> {
-  const res = await fetch(`/api${path}`, body === undefined ? undefined : {
-    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
-  });
+  let res: Response;
+  try {
+    res = await fetch(`/api${path}`, body === undefined ? undefined : {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+    });
+  } catch {
+    throw new ApiError('network', 0);
+  }
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error((data as { error?: string }).error ?? `Error ${res.status}`);
+  if (!res.ok) throw new ApiError((data as { error?: string }).error ?? `Error ${res.status}`, res.status);
   return data as T;
 }
 

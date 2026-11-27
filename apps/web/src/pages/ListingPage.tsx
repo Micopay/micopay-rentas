@@ -1,10 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { api, type Quote } from '../api';
-import { Cover, ErrorBox, Panel, Row, usePersona } from '../comun';
+import { ApiError, api, type Policy, type Quote } from '../api';
+import { Cover, ErrorBox, Panel, Rich, Row, usePersona } from '../comun';
 import { day, isoDay, mxn, usdc } from '../format';
 import { Badge, Button, Label } from '../ui';
+import { t } from '../i18n';
 import Calendar, { crossesBooked } from '../ui/Calendar';
+
+const POLICY: Record<Policy, string> = { flexible: 'Flexible', moderate: 'Moderada', strict: 'Estricta' };
 import { useData } from '../useData';
 
 export default function ListingPage() {
@@ -53,13 +56,12 @@ export default function ListingPage() {
       const r = await api.book({ listingId: l.id, guestId: persona.user.id, checkIn, checkOut, guests });
       nav(`/bookings/${r.id}`);
     } catch (e) {
-      const errMsg = (e as Error).message;
-      if (errMsg === 'Those dates are already booked') {
-        setErr('Those dates are no longer available. Please choose different dates.');
+      if (e instanceof ApiError && e.raw === 'Those dates are already booked') {
+        setErr(t('Esas fechas ya no están disponibles. Elige otras fechas.'));
         setQ(null);
         setQuoteDates(null);
       } else {
-        setErr(errMsg);
+        setErr((e as Error).message);
       }
       reload();
     } finally {
@@ -77,27 +79,29 @@ export default function ListingPage() {
           <p className="mt-3 text-[17px] leading-relaxed">{l.description}</p>
           <div className="mt-3 flex flex-wrap gap-2">
             {l.amenities.map((a) => <Badge key={a}>{a}</Badge>)}
-            <Badge tono="tinta">{l.bedrooms} bedroom{l.bedrooms > 1 ? 's' : ''} · up to {l.max_guests}</Badge>
+            <Badge tono="tinta">{l.bedrooms === 1 ? t('1 recámara · hasta {max}', { max: l.max_guests }) : t('{n} recámaras · hasta {max}', { n: l.bedrooms, max: l.max_guests })}</Badge>
           </div>
         </div>
-        <Panel title={`Cancellation policy · ${policy?.label ?? l.policy}`}>
+        <Panel title={t('Política de cancelación · {policy}', { policy: t(POLICY[l.policy]) })}>
           <ul className="space-y-1 text-[15px]">
-            {policy?.tiers.map((t) => <li key={t.days}>Cancel at least <b>{t.days} day{t.days > 1 ? 's' : ''}</b> before check-in: <b>{t.refundPct}%</b> of the stay and fee back.</li>)}
-            <li>Later than that: the stay is not refunded. The damage deposit always comes back if you cancel.</li>
-            <li>If the host cancels, you get everything back.</li>
+            {policy?.tiers.map((tier) => <li key={tier.days}><Rich text={tier.days === 1
+              ? t('Cancela al menos <b>1 día</b> antes del check-in: te devolvemos <b>{pct}%</b> de la estancia y la comisión.', { pct: tier.refundPct })
+              : t('Cancela al menos <b>{days} días</b> antes del check-in: te devolvemos <b>{pct}%</b> de la estancia y la comisión.', { days: tier.days, pct: tier.refundPct })} /></li>)}
+            <li>{t('Después de eso, la estancia no se reembolsa. El depósito por daños siempre vuelve si cancelas.')}</li>
+            <li>{t('Si cancela el anfitrión, te devolvemos todo.')}</li>
           </ul>
-          <p className="mt-3 text-[13px] text-gris">These rules are written into the escrow contract when you book: nobody can change them afterwards.</p>
+          <p className="mt-3 text-[13px] text-gris">{t('Estas reglas quedan escritas en el contrato de garantía al reservar: nadie puede cambiarlas después.')}</p>
         </Panel>
-        <Panel title="Your host">
+        <Panel title={t('Tu anfitrión')}>
           <div className="font-bold">{l.host_name}</div>
           <div className="text-[14px] text-gris">{l.host_bio}</div>
         </Panel>
       </div>
 
       <div className="min-w-0 lg:sticky lg:top-4 lg:self-start">
-        <Panel title={<span className="num">{mxn(l.nightly_mxn)} / night</span>}>
+        <Panel title={<span className="num">{mxn(l.nightly_mxn)} {t('/ noche')}</span>}>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <label className="text-[13px] font-bold text-gris">Check-in
+            <label className="text-[13px] font-bold text-gris">{t('Llegada')}
               <input type="date" value={checkIn} min={isoDay(1)} onChange={(e) => {
                 const newCheckIn = e.target.value;
                 // If check-out is set, validate the new range
@@ -107,7 +111,7 @@ export default function ListingPage() {
                 setCheckIn(newCheckIn);
               }} className="mt-1 min-h-12 w-full rounded-sm border-2 border-tinta bg-fondo px-2 text-[16px] text-tinta" />
             </label>
-            <label className="text-[13px] font-bold text-gris">Check-out
+            <label className="text-[13px] font-bold text-gris">{t('Salida')}
               <input type="date" value={checkOut} min={checkIn} onChange={(e) => {
                 const newCheckOut = e.target.value;
                 // Validate the range before accepting
@@ -117,25 +121,25 @@ export default function ListingPage() {
                 setCheckOut(newCheckOut);
               }} className="mt-1 min-h-12 w-full rounded-sm border-2 border-tinta bg-fondo px-2 text-[16px] text-tinta" />
             </label>
-            <label className="sm:col-span-2 text-[13px] font-bold text-gris">Guests
+            <label className="sm:col-span-2 text-[13px] font-bold text-gris">{t('Huéspedes')}
               <input type="number" min={1} max={l.max_guests} value={guests} onChange={(e) => setGuests(Number(e.target.value))} className="mt-1 min-h-12 w-full rounded-sm border-2 border-tinta bg-fondo px-2 text-[16px] text-tinta" />
             </label>
           </div>
 
           {q && (
             <div className="mt-4 text-[15px]">
-              <Row k={`${mxn(q.nightly)} × ${q.nights} night${q.nights > 1 ? 's' : ''}`} v={mxn(q.stay)} />
-              <Row k="Cleaning" v={mxn(q.cleaning)} />
-              <Row k={`MicoPay fee (${Number(q.feeRate) * 100}%)`} v={mxn(q.fee)} />
-              <Row k="Damage deposit (refundable)" v={mxn(q.deposit)} />
-              <Row strong k="Into escrow" v={mxn(q.total)} />
-              {rate && <div className="mt-1 text-right text-[13px] text-gris num">≈ {usdc(Number(q.total) / rate)} at 1 USD = {rate.toFixed(2)} MXN</div>}
+              <Row k={q.nights === 1 ? t('{price} × 1 noche', { price: mxn(q.nightly) }) : t('{price} × {n} noches', { price: mxn(q.nightly), n: q.nights })} v={mxn(q.stay)} />
+              <Row k={t('Limpieza')} v={mxn(q.cleaning)} />
+              <Row k={t('Comisión de MicoPay ({pct}%)', { pct: Number(q.feeRate) * 100 })} v={mxn(q.fee)} />
+              <Row k={t('Depósito por daños (reembolsable)')} v={mxn(q.deposit)} />
+              <Row strong k={t('A la garantía')} v={mxn(q.total)} />
+              {rate && <div className="mt-1 text-right text-[13px] text-gris num">{t('≈ {amount} a 1 USD = {rate} MXN', { amount: usdc(Number(q.total) / rate), rate: rate.toFixed(2) })}</div>}
               <div className="mt-3 rounded-sm border-2 border-tinta bg-verde-suave px-3 py-2 text-[13px]">
-                The host receives <b className="num">{mxn(q.subtotal)}</b> after check-in. The deposit comes back after check-out unless there is a damage claim.
+                <Rich text={t('El anfitrión recibe <b>{amount}</b> después del check-in. El depósito vuelve después de la salida, salvo que haya un reclamo por daños.', { amount: mxn(q.subtotal) })} />
               </div>
             </div>
           )}
-          {q && !q.available && <div className="mt-3"><ErrorBox msg="Those dates are already booked" /></div>}
+          {q && !q.available && <div className="mt-3"><ErrorBox msg={t('Esas fechas ya están reservadas')} /></div>}
           <div className="mt-3"><ErrorBox msg={qErr ?? err} /></div>
 
           <div className="mt-4">
@@ -153,12 +157,12 @@ export default function ListingPage() {
           <div className="mt-4">
             {isGuest ? (
               <Button block disabled={!q || !q.available || busy || quoteDates?.checkIn !== checkIn || quoteDates?.checkOut !== checkOut} onClick={book}>
-                {busy ? 'Locking in escrow on Stellar…' : 'Book and pay into escrow'}
+                {busy ? t('Bloqueando en la garantía de Stellar…') : t('Reservar y pagar a la garantía')}
               </Button>
             ) : (
-              <div className="text-[14px] text-gris">Switch to the guest (top right) to book.</div>
+              <div className="text-[14px] text-gris">{t('Cámbiate al huésped (arriba a la derecha) para reservar.')}</div>
             )}
-            {isGuest && <p className="mt-2 text-[12px] text-gris">Demo: the guest's testnet key signs. In production you approve it in your MicoPay app.</p>}
+            {isGuest && <p className="mt-2 text-[12px] text-gris">{t('Demo: firma la llave de testnet del huésped. En producción lo apruebas en tu app de MicoPay.')}</p>}
           </div>
         </Panel>
       </div>

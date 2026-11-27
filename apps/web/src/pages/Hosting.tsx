@@ -2,6 +2,7 @@ import Big from 'big.js';
 import { api } from '../api';
 import { EmptyState, ErrorBox, Loading, MissingPersona, usePersona } from '../comun';
 import { mxn, usdc } from '../format';
+import { t } from '../i18n';
 import { MoneyBlock } from '../ui';
 import { useData } from '../useData';
 import { BookingList } from './Trips';
@@ -19,14 +20,14 @@ export default function Hosting() {
   if (!host) return <MissingPersona type="host" />;
   return (
     <div className="space-y-6">
-      <h1 className="font-display text-[32px] font-extrabold">Hosting · {host.name}</h1>
+      <h1 className="font-display text-[32px] font-extrabold">{t('Anfitrión · {name}', { name: host.name })}</h1>
       <div className="grid gap-4 sm:grid-cols-3">
-        <MoneyBlock etiqueta="Balance in MicoPay" cifra={host.balance ? usdc(host.balance) : '—'} pie="Withdraw to SPEI or cash in the MicoPay app" />
-        <MoneyBlock tipo="cobro" etiqueta="Waiting in escrow" cifra={loading ? '—' : mxn(inEscrow.toFixed(2))} pie="Stays not paid out yet; paid after the hold that follows check-in" />
-        <MoneyBlock etiqueta="Paid out (stays)" cifra={loading ? '—' : mxn(paid.toFixed(2))} pie="Full price: the fee is paid by the guest" />
+        <MoneyBlock etiqueta={t('Saldo en MicoPay')} cifra={host.balance ? usdc(host.balance) : '—'} pie={t('Retira por SPEI o en efectivo en la app de MicoPay')} />
+        <MoneyBlock tipo="cobro" etiqueta={t('Esperando en la garantía')} cifra={loading ? '—' : mxn(inEscrow.toFixed(2))} pie={t('Estancias aún sin pagar; se pagan al terminar la retención tras el check-in')} />
+        <MoneyBlock etiqueta={t('Pagado (estancias)')} cifra={loading ? '—' : mxn(paid.toFixed(2))} pie={t('Precio completo: la comisión la paga el huésped')} />
       </div>
       <ErrorBox msg={error} onRetry={reload} />
-      <BookingList items={data} loading={loading} who="host" empty="No bookings yet." />
+      <BookingList items={data} loading={loading} who="host" empty={t('Aún no hay reservas.')} />
     </div>
   );
 }

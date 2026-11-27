@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { api, type Booking } from '../api';
 import { Cover, EmptyState, ErrorBox, Loading, MissingPersona, StatusBadge, usePersona } from '../comun';
 import { day, mxn } from '../format';
+import { t } from '../i18n';
 import { useData } from '../useData';
 
 export function BookingList({ items, loading, empty, who }: { items: Booking[] | null; loading?: boolean; empty: string; who: 'guest' | 'host' | 'arbiter' }) {
@@ -15,8 +16,8 @@ export function BookingList({ items, loading, empty, who }: { items: Booking[] |
           <Cover n={b.cover} className="aspect-[4/3]" />
           <div>
             <div className="font-display text-[17px] font-extrabold leading-tight">{b.title}</div>
-            <div className="text-[14px] text-gris">{day(b.check_in)} → {day(b.check_out)} · {b.nights} night{b.nights > 1 ? 's' : ''}</div>
-            <div className="text-[13px] text-gris">{b.reference} · {who === 'guest' ? `host ${b.host_name}` : `guest ${b.guest_name}`}</div>
+            <div className="text-[14px] text-gris">{day(b.check_in)} → {day(b.check_out)} · {b.nights === 1 ? t('1 noche') : t('{n} noches', { n: b.nights })}</div>
+            <div className="text-[13px] text-gris">{b.reference} · {who === 'guest' ? t('anfitrión {name}', { name: b.host_name }) : t('huésped {name}', { name: b.guest_name })}</div>
           </div>
           <div className="col-span-2 flex items-center justify-between gap-3 sm:col-span-1 sm:flex-col sm:items-end">
             <StatusBadge s={b.status} />
@@ -35,9 +36,9 @@ export default function Trips() {
   if (!guestId) return <MissingPersona type="guest" />;
   return (
     <div className="space-y-4">
-      <h1 className="font-display text-[32px] font-extrabold">My trips</h1>
+      <h1 className="font-display text-[32px] font-extrabold">{t('Mis viajes')}</h1>
       <ErrorBox msg={error} onRetry={reload} />
-      <BookingList items={data} loading={loading} who="guest" empty="No trips yet." />
+      <BookingList items={data} loading={loading} who="guest" empty={t('Aún no tienes viajes.')} />
     </div>
   );
 }

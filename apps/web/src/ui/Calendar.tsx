@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { day } from '../format';
+import { locale, t } from '../i18n';
 
 interface BookedRange {
   check_in: string;
@@ -30,8 +31,8 @@ export function crossesBooked(booked: BookedRange[], start: string, end: string)
   return booked.some((b) => start < b.check_out.slice(0, 10) && end > b.check_in.slice(0, 10));
 }
 
-const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-const weekDays = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+const weekDays = ['Do', 'Lu', 'Ma', 'Mi', 'Ju', 'Vi', 'Sá'];
+const monthLabel = (y: number, m: number) => new Date(Date.UTC(y, m, 1)).toLocaleDateString(locale, { month: 'long', year: 'numeric', timeZone: 'UTC' });
 
 export default function Calendar({ booked, checkIn, checkOut, onCheckInChange, onCheckOutChange, minDate }: CalendarProps) {
   const [view, setView] = useState(() => {
@@ -102,7 +103,7 @@ export default function Calendar({ booked, checkIn, checkOut, onCheckInChange, o
     if (!iso) return <div key={`empty-${i}`} className="h-12" aria-hidden="true" />;
     const state = stateOf(iso);
     const disabled = isDisabled(iso);
-    const label = `${day(iso)}, ${state === 'booked' ? (disabled ? 'booked' : 'booked from this day, can be your check-out') : state === 'selected' ? 'selected' : state === 'in-range' ? 'in selected range' : 'no booking registered'}`;
+    const label = `${day(iso)}, ${t(state === 'booked' ? (disabled ? 'reservado' : 'reservado desde este día; puede ser tu salida') : state === 'selected' ? 'seleccionado' : state === 'in-range' ? 'dentro del rango elegido' : 'sin reserva registrada')}`;
     const style: Record<DateState, string> = {
       free: 'bg-papel text-tinta border-line hover:border-tinta',
       booked: 'bg-papel text-gris-2 border-line line-through decoration-2 decoration-tinta',
@@ -131,20 +132,20 @@ export default function Calendar({ booked, checkIn, checkOut, onCheckInChange, o
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <button type="button" onClick={() => moveMonth(-1)} className={navBtn} aria-label="Previous month">←</button>
-        <span className="text-[15px] font-bold text-tinta" aria-live="polite">{monthNames[view.m]} {view.y}</span>
-        <button type="button" onClick={() => moveMonth(1)} className={navBtn} aria-label="Next month">→</button>
+        <button type="button" onClick={() => moveMonth(-1)} className={navBtn} aria-label={t('Mes anterior')}>←</button>
+        <span className="text-[15px] font-bold text-tinta" aria-live="polite">{monthLabel(view.y, view.m)}</span>
+        <button type="button" onClick={() => moveMonth(1)} className={navBtn} aria-label={t('Mes siguiente')}>→</button>
       </div>
 
-      <div ref={gridRef} className="grid grid-cols-7 gap-0.5" aria-label="Calendar">
-        {weekDays.map((wd) => <div key={wd} className="py-1 text-center text-[12px] font-bold text-gris" aria-hidden="true">{wd}</div>)}
+      <div ref={gridRef} className="grid grid-cols-7 gap-0.5" aria-label={t('Calendario')}>
+        {weekDays.map((wd) => <div key={wd} className="py-1 text-center text-[12px] font-bold text-gris" aria-hidden="true">{t(wd)}</div>)}
         {monthDays.map(cell)}
       </div>
 
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] text-gris">
-        <span className="flex items-center gap-1"><span className="h-4 w-4 rounded border-2 border-line bg-papel" />No booking registered</span>
-        <span className="flex items-center gap-1"><span className="h-4 w-4 rounded border-2 border-line bg-papel line-through decoration-tinta" />Booked</span>
-        <span className="flex items-center gap-1"><span className="h-4 w-4 rounded border-2 border-tinta bg-naranja" />Selected</span>
+        <span className="flex items-center gap-1"><span className="h-4 w-4 rounded border-2 border-line bg-papel" />{t('Sin reserva registrada')}</span>
+        <span className="flex items-center gap-1"><span className="h-4 w-4 rounded border-2 border-line bg-papel line-through decoration-tinta" />{t('Reservado')}</span>
+        <span className="flex items-center gap-1"><span className="h-4 w-4 rounded border-2 border-tinta bg-naranja" />{t('Seleccionado')}</span>
       </div>
     </div>
   );
