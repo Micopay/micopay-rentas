@@ -74,7 +74,7 @@ export const ErrorBox = ({ msg, onRetry }: { msg: string | null; onRetry?: () =>
     <div className="rounded-sm border-2 border-rojo bg-rojo-suave px-3 py-2 text-[14px] font-semibold text-rojo">
       {msg}
       {onRetry && (
-        <button onClick={onRetry} className="ml-3 underline hover:no-underline focus:outline focus:outline-2 focus:outline-offset-2 focus:outline-rojo">
+        <button onClick={onRetry} className="ml-3 min-h-12 min-w-12 px-2 underline hover:no-underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rojo">
           Retry
         </button>
       )}

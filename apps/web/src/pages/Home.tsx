@@ -32,7 +32,7 @@ export default function Home() {
       <ErrorBox msg={error} onRetry={reload} />
       {loading ? (
         <Loading />
-      ) : data && data.length > 0 ? (
+      ) : !data ? null : data.length > 0 ? (
         <section className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
           {data.map((l) => (
             <Link key={l.id} to={`/stay/${l.slug}`} className="group block rounded-sm border-2 border-tinta bg-papel shadow-solida active:translate-x-[3px] active:translate-y-[3px] active:shadow-solida-xs">

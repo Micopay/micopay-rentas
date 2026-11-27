@@ -26,8 +26,8 @@ export default function BookingPage({ onChange }: { onChange: () => void }) {
   useEffect(() => { load(); const t = setInterval(load, 10_000); return () => clearInterval(t); }, [id]);
   useEffect(() => { const t = setInterval(() => setNow(Date.now() / 1000), 1000); return () => clearInterval(t); }, []);
 
-  if (initialLoad && !b) return <ErrorBox msg={err} />;
-  if (!b) return <ErrorBox msg={err ?? 'Booking not found'} />;
+  if (initialLoad && !b) return <Loading />;
+  if (!b) return <ErrorBox msg={err ?? 'Booking not found'} onRetry={load} />;
   const ledger = now + skew;
   const checkIn = Number(b.chain_check_in), deadline = Number(b.chain_deadline);
   const phase = ledger < checkIn ? 'before' : ledger < deadline ? 'stay' : 'after';

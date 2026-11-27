@@ -62,7 +62,7 @@ export default function App() {
             </nav>
             <div className="ml-auto flex items-center gap-3">
               {usersError ? (
-                <button onClick={reloadUsers} className="text-[13px] font-bold text-rojo underline">Failed to load users</button>
+                <button onClick={reloadUsers} className="min-h-12 px-2 text-[13px] font-bold text-rojo underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-rojo">Failed to load users · Retry</button>
               ) : persona && persona.kind !== 'arbiter' ? (
                 <span className="num text-[13px] text-gris">{persona.user.balance ? usdc(persona.user.balance) : '—'}</span>
               ) : null}
@@ -76,7 +76,7 @@ export default function App() {
               </label>
             </div>
           </div>
-          {configError && <div className="border-t-2 border-tinta bg-rojo-suave px-4 py-1.5 text-center text-[12px] font-bold text-rojo">Failed to load config. <button onClick={reloadConfig} className="underline">Retry</button></div>}
+          {configError && <div className="border-t-2 border-tinta bg-rojo-suave px-4 py-1.5 text-center text-[12px] font-bold text-rojo">Failed to load config. <button onClick={reloadConfig} className="min-h-12 min-w-12 px-2 underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-rojo">Retry</button></div>}
           {config && config.daySecs < 86_400 && (
             <div className="border-t-2 border-tinta bg-aviso px-4 py-1.5 text-center text-[12px] font-bold text-aviso-texto">
               Testnet demo · demo clock: 1 calendar day = {config.daySecs} s on-chain, so check-in and payouts happen within minutes
